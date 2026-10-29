@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dam"
+version = "1.0.0"
+description = "Asistente de navegación y plantilla de prácticas para DAM"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Alumno DAM" }]
+dependencies = [
+    "prompt_toolkit>=3.0",
+    "pdfplumber>=0.9",
+    "python-docx>=0.8",
+    "odfpy>=1.4",
+    "pypdf>=3.0",
+]
+
+[project.scripts]
+_dam = "dam.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["dam*"]
