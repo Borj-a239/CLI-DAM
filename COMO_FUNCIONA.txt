@@ -167,10 +167,15 @@ D) GENERAR PLANTILLES (dam/templates/*.py). Regla d'or a cada mòdul: CERO
      estructura, no solucions.
 
 E) POLITIQUES DE NO-DANY:
-   - _alloc()/reserve(): si existeix → TTY pregunta s/N; sense TTY → es
-     CONSERVA i s'avisa (mai destrueix codi teva; el test
-     test_start_no_sobreescriveix_sense_forcar ho cobreix). --force
-     sobrescriu (amb avís).
+   - reserve(): les plantilles "riques" (index.html/estilos.css) es RESERVEN
+     abans d'escriure: si existeixen, s'avisa i es CONSERVEN intactes sense
+     inventar-se variants (així un segon `dam start` sobre la mateixa carpeta
+     és idempotent i no crea brossa tipus index-2.html).
+   - _alloc(): fitxers individuals (practica8.php, .sql, .ods…): si existeix
+     → TTY pregunta s/N; sense TTY → es conserva i s'avisa; amb --force
+     reescriu. En mode máquina sense TTY, si vols un duplicat en lloc de
+     conservar, genera variants -2/-3 (mai destrueix codi teva). El test
+     test_start_no_sobreescriveix_sense_forcar ho cobreix.
    - Crea sempre README.md; autor del config a totes les capçaleres.
    - stdout només imprimeix la ruta final (per coherència amb el wrapper i
      per ser pipeable: `cd $(python3 dam.py start x.pdf --dest ...)`).
