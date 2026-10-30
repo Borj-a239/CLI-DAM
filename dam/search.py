@@ -1,4 +1,4 @@
-"""Criteris de cerca: normalització, tokens i puntuació difusa simple."""
+"""Criterios de búsqueda: normalización, tokens y puntuación difusa simple."""
 from __future__ import annotations
 
 import os

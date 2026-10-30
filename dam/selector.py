@@ -11,7 +11,7 @@ import subprocess
 import sys
 from typing import List, Optional
 
-from .util import info
+from .util import home_dir, info
 
 
 def _glyph(is_dir: bool) -> str:
@@ -19,7 +19,7 @@ def _glyph(is_dir: bool) -> str:
 
 
 def _label(entry) -> str:
-    home = os.path.expanduser("~")
+    home = str(home_dir())
     path = entry.path
     if path.startswith(home + os.sep) or path == home:
         path = "~" + path[len(home):]

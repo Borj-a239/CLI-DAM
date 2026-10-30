@@ -107,13 +107,14 @@ PHP = [
 ]
 
 
-def main() -> None:
-    out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".")
+def main(argv: List[str] | None = None) -> None:
+    args = argv if argv is not None else sys.argv[1:]
+    out_dir = Path(args[0]) if args else Path(".")
     out_dir.mkdir(parents=True, exist_ok=True)
     build_pdf(out_dir / "cuestionario_tema4.pdf", CUESTIONARIO)
     build_pdf(out_dir / "practica_web.pdf", WEB)
     build_pdf(out_dir / "php_formularios.pdf", PHP)
-    print(f"PDFs de prueba escritos en {out_dir}")
+    print(f"PDFs de prueba escritos en {out_dir}", file=sys.stderr)
 
 
 if __name__ == "__main__":

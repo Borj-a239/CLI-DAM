@@ -1,4 +1,9 @@
-"""Plantillas de código: .sql, .js y proyectos Java (solo firmas/huecos)."""
+"""Plantillas de código: .sql, .js y proyectos Java (solo firmas/huecos).
+
+Regla de oro: NADA de lógica resuelta. CREATE TABLE con el cuerpo vacío,
+SELECT solo como comentario, funciones con firma y // TODO, clases Java con
+atributos private sin tipo definido y métodos vacíos.
+"""
 from __future__ import annotations
 
 import keyword
@@ -6,8 +11,6 @@ import re
 import unicodedata
 from pathlib import Path
 from typing import List, Tuple
-
-from .plain import write_plain
 
 RESERVED_SQL = {
     "select", "from", "where", "table", "create", "insert", "into", "join",
@@ -36,7 +39,7 @@ def write_sql(
         lines.append(");")
         lines.append("")
     for snippet in selects[:6]:
-        lines.append(f"-- Consulta propuesta por el enunciado (no la resuelvo):")
+        lines.append("-- Consulta propuesta por el enunciado (se copia como comentario):")
         lines.append(f"--   {snippet}")
     body = "\n".join(lines) + "\n"
     path.write_text(
@@ -120,15 +123,15 @@ def infer_package(dest: Path) -> str:
         parts.append(candidate)
     parts = parts[-3:]
     pieces = ["practica"] + [p for p in parts if p != "practica"]
-    # dedupe preservando orden
     seen = set()
-    unique = []
+    unique: List[str] = []
     for piece in pieces:
         if piece not in seen:
             seen.add(piece)
             unique.append(piece)
     pkg = ".".join(unique)
     return pkg if SAFE_PACKAGE_RE.match(pkg) else "practica"
+
 
 
 def write_java_project(
@@ -140,6 +143,11 @@ def write_java_project(
     autor: str,
     title: str,
 ) -> List[Path]:
+    """Crea src/main/java/<paquete>/ con clases, atributos private y // TODO.
+
+    El `package` es el correcto según la ruta (o el declarado en el PDF).
+    Los métodos solo existen como firma vacía; nada de implementación.
+    """
     created: List[Path] = []
     java_dir = root / "src" / "main" / "java"
     pkg_dir = java_dir / package.replace(".", "/")
@@ -149,20 +157,23 @@ def write_java_project(
         classes = ["Principal"]
 
     for i, class_name in enumerate(classes):
-        body_lines = [f"package {package};", "", f"/**",
-                      f" * Práctica: {title}",
-                      f" * Autor: {autor}",
-                      f" * Plantilla vacía generada por 'dam start'.",
-                      f" */",
-                      f"public class {class_name} {{"]
+        body_lines = [
+            f"package {package};",
+            "",
+            "/**",
+            f" * Práctica: {title}",
+            f" * Autor: {autor}",
+            " * Plantilla vacía generada por 'dam start'.",
+            " */",
+            f"public class {class_name} {{",
+        ]
         if i == 0 and fields:
             for field in fields[:10]:
                 body_lines.append(f"    private Object {field}; // TODO: tipo real")
             body_lines.append("")
-        if i == 0:
-            body_lines.append("    // TODO: constructores")
-            body_lines.append("")
-        for method in (methods[:8] if i == 0 else []):
+        body_lines.append("    // TODO: constructores")
+        body_lines.append("")
+        for method in methods[:8]:
             body_lines.append(f"    public void {method}() {{")
             body_lines.append("        // TODO: implementar")
             body_lines.append("    }")

@@ -1,0 +1,228 @@
+============================================================================
+DAM — COM FUNCIONA (document intern per a tu)
+============================================================================
+
+Aquest .txt explica com funciona el CLI per dins: peces, fluxos de dades i
+decisions de disseny. Si només vols usar-lo, el README.md ja en va bé.
+
+----------------------------------------------------------------------------
+1. PER QUÈ EL WRAPPER (dam.bash)?
+----------------------------------------------------------------------------
+Quan execut `dam go x`, això és un PROCÉS FIL del teu shell. Un fill no pot
+fer `cd` al pare: per això mai existiria un binari que "et mogui" de carpeta.
+La solució és clàssica i és el nucli del projecte:
+
+  tu escreves:  dam go herencia
+                  │
+                  ▼
+  funció shell dam()  ── veu que $1 és "go" o "last"
+                  │
+                  ▼
+  r=$(_dam go herencia)   ← el binari REAL només IMPRIMEIX una ruta per stdout
+                  │           (tot el xerrameca: stderr; per això la $()
+                  │            captura només la ruta neta)
+                  ▼
+  [ -n "$r" ] && cd "$r"  ← el cd el fa la teva SHELL, no el fill
+
+Per això hi ha DOS noms: `dam` (funció de .bashrc, veuràs a dam.bash) i
+`_dam` (consola de pip → dam.cli:main, el programa real).
+
+"Mode màquina": com que el wrapper captura stdout, cal que stdout NOMÉS
+contingui la ruta final. Tot el restant (arbres, avisos, errors) va per
+stderr (mirau dam/util.py: info/warn/err). En una TTY veus el selector
+interactiu abans que s'imprimeixi la ruta; amb pipes o --print-fast, surt
+directament el millor resultat.
+
+----------------------------------------------------------------------------
+2. ON VIVIN LES DADES
+----------------------------------------------------------------------------
+~/.damrc                config: roots (llista), autor, editor.
+                        Format "clau = valor" per línia; parser propi a
+                        dam/config.py (sense dependre de configparser: el
+                        format demanat era senzill i volem tolerar línees
+                        trencades sense petar).
+~/.dam/state.json       {"hist": [...]} historial de rutes (màx 200).
+~/.dam/cache/<hash>.json Índexs perezosos per arrel. El hash és sha256 de la
+                        ruta absolut (primers 32 caràcters).
+Tots tres es resolen amb Path.home() A CADA CRIDA (funcions config_path(),
+state_path(), cache_dir()), no a nivell de mòdul; així és fàcil de provar amb
+HOME temporal (els tests ho fan).
+
+----------------------------------------------------------------------------
+3. `dam go` PAS A PAS (dam/commands/nav.py + index.py + search.py)
+----------------------------------------------------------------------------
+1. Arrels: si passes rutes com a arguments, el config S'IGNORA (decisió
+   literal de l'enunciat). Si no, les roots del ~/.damrc. Si text == ".",
+   s'afegeix el cwd. Les rutes que no existeixen es llencen en silenci.
+2. Índex: per a cada arrel, `index_root()` mira la caché (vàlida <10 min i
+   amb l'arrel sense modificar — comparem st_mtime). Si no, recorreguda amb
+   os.scandir propi en pila (dam/index.py:_walk): qualsevol OSError (tipus
+   "permisos denegats") es IGNOREN EN SILENCI, mai pitem.
+3. Ranking (dam/search.py): normalitzem (minúscules + sense accents, amb
+   unicodedata NFD). Tokens de la consulta han de puntuar >0 contra nom o
+   ruta: igualtat=100, prefix=60, substring=40, subseqüència="difusa"=15,
+   apareixer a la ruta=20. Suma + bonus per profunditat menor. Cap resultat
+   ⇒ sortida 1 amb missatge per stderr (mai traceback).
+4. Selecció (dam/selector.py): primer prompt_toolkit (PromptSession amb
+   Completer: escrius i van apareixent les rutes; multi-columna); si no hi és
+   la lib i hi ha `fzf`, fem servir fzf amb la llista per stdin; si no, llista
+   numerada (màxim 60 entrades; més, acota). Cap opció ⇒ codi 2.
+5. fitxer o carpeta: si tries un fitxer, el que registre i imprimeix és la
+   CARPETA que el conté (final_dir()).
+6. state.record(ruta) i print(ruta). Fi.
+
+----------------------------------------------------------------------------
+4. `dam last` (state.py)
+----------------------------------------------------------------------------
+L'historial es registra SENSE duplicats consecutius. `last` sense argument
+imprimeix l'anterior a l'últim (índex 1); `last 0`, l'última. Tot per stdout
+perquè el wrapper faci el cd.
+
+----------------------------------------------------------------------------
+5. `dam ver` (commands/ver.py)
+----------------------------------------------------------------------------
+Recorreguda manual amb os.scandir + contador de profunditat (l'enunciat ho
+demanava així a propòsit: control sobre què s'oculta). Regles:
+- ocults (comença amb ".") fora amb -a;
+- brossa de build (node_modules, __pycache__, target, build, dist, .venv,
+  venv, .gradle, out, caches de mypy/pytest) fora llevat de --build (o -a);
+- --depth N talla; directorius primer i després fitxers; connexions
+  ├─/└─; els directoris buits-no-resables no es pinten (scandir falla →
+  aquell tros simply no existeix). Només lectura: mai escriu.
+
+----------------------------------------------------------------------------
+6. `dam start` (commands/start.py) — EL COR DEL ASSUNTE
+----------------------------------------------------------------------------
+A) LLEGIR EL PDF (dam/pdf.py) — degradació en 3 capes:
+   1. pdfplumber (recomenat, ve a requirements.txt)
+   2. pypdf / PyPDF2 (fallback)
+   3. dam/minipdf.py — PARSER PROPI ESCRIT A MÀ, sense dependències.
+      Entén: objectes N 0 obj, fluxos plans i FlateDecode (zlib),
+      operators BT/Tj/TJ/'/"/Tf/T*/Td/TD/Tm/ET, literals (...) i <hex>,
+      escaped bàsic, i mapes ToUnicode (beginbfchar/beginbfrange) per als
+      PDFs amb encoding arbitrària. A més RECONSTRUEIX LÍNIES seguint la
+      posició real (un petit _TextState amb x/y): si un fragment apareix a
+      una altra coordenada Y, hi ha \n; si a la mateixa línia queda un forat
+      més gran que mig espai, insereix " ". Això és crucial: la detecció de
+      preguntes (regex "1. ...?") necessita línies reals. Cap PDF rar el fa
+      petar: qualsevol tros incomprensible simply es llença (return "" →
+      missatge clar amb què instal·lar).
+
+B) DETECTAR (dam/detection/detector.py + keywords.py EDITABLE)
+   - Capa 1: puntuació per paraules clau. Cada tipus (cuestionario, html,
+     css, sql, js, java, calc, base) té una llista de pistes amb pes
+     ("cadena" o ("cadena", pes)). Comptem coincidències DE PARCELA (la
+     funció _count_needle evita que "formula" pugi "formulario"... en real
+     evita els hits parcials tipus formula⊂formulario). Regles de
+     robustesa que hem après durant les proves:
+       * si un tipus només encerta amb 1 terme distinct i poca força, no
+         puntua (evita que "Object" declar una classe Java);
+       * "java" a més a més necessita un senyal REAL (class X, package x.y
+         o mètodes detectats) per muntar el projecte;
+       * les preguntes numerades (regex QUESTION_RE, sense DOTALL perquè el
+         .*? no es mengi la pregunta següent) sumen força a "cuestionario";
+       * TYPE_PRIORITY trenca empats: java>sql>base>calc>js>html>css>quest.
+       * el pes "calc" de la paraula "calc" es va TREURE del diccionario
+         ("calc" de "practica8.calc" és un fals positiu; "fórmula" dins de
+         "formulario", també: d'aquí el match de paraula).
+   - Senyals estructurades (les mateixes regex que l'enunciat): CREATE TABLE
+     (només el nom, MAI els camps), SELECT...FROM (es guarda com a COMENTARI
+     literal de l'enunciat), function nom(params), class/interface X,
+     package x.y, "método m(", "campo nombre" → capçaleres per a .ods,
+     tabla X → taules per al .odb.
+   - Capa 2 (fallback literal de l'enunciat): regex \.(\w+) sobre tot el
+     text → cada extensió (php, py, c...) esdevé un fitxer BUIT amb
+     capçalera d'autor. Si el PDF diu explicitament "practica8.php"
+     (PRACTICE_EXT_RE), el fitxur es diu EXACTAMENT així. Les extensions
+     "rich" (html/css/js/sql/java) no es dupliquen si la plantilla rica ja
+     les cobreix. Hi ha una llista `skip` d'extensions-no-codi (.pdf, .png,
+     partícules que el regex podria caçar de text continu, etc.).
+
+C) TRIAR DESTÍ (resolve_dest): --dest (relatiu → dins la primera root del
+   config); sense --dest: carpeta del PDF / slug(nom). En TTY PREGUNTA amb
+   valor per defecte a l'Intro.
+
+D) GENERAR PLANTILLES (dam/templates/*.py). Regla d'or a cada mòdul: CERO
+   LÒGICA RESOLTA.
+   - plain.py: capçalera de autor per extensió (comentari correcte per a
+     php/js/py/sql/css/html...), línia TODO segons llenguatge, README.md amb
+     títol + asignatura + llistat + "Alumno: autor".
+   - documents.py (.docx via python-docx, .odt via odfpy): títol, autor,
+     preguntes del PDF en negreta TAL CUAL i paràgraf BUIT sota cada una.
+     Autor també a les propietats core del document. Si falten ambdues libs
+     → degradació a .cuestionario.txt amb el mateix contingut (i avís amb
+     la comanda exacta d'instal·lar).
+   - web.py: index.html amb header/nav/main/footer i css/estilos.css. Es
+     reserven les dues rutes abans d'escriure (pels permisos de
+     no-sobrescriure 1-a-1; sense això havíem creat "index-2.html" falsos).
+   - code.py: sql (CREATE TABLE amb cos buit + SELECTs només comentats),
+     js (firmes + // TODO), java (paquet deduït de la RUTA —no hardcodejat—
+     sanejant cada tros com a identificador java vàlid; classes amb
+     atributs private i mètodes buits; Main amb main buit).
+   - data.py: .ods via odfpy (capçaleres + 10 files buides); .odb escrit a
+     mà com ODF real (zip amb mimetype STORED primer + content.xml amb
+     <office:database> i taules amb cells de capçalera). Això sí: l'ODF de
+     base de dades demana connexió JDBC/odbc per ser "real del tot"; nosaltres
+     deixem l'estructura visible (taules/camps) — el que demanava l'enunciat:
+     estructura, no solucions.
+
+E) POLITIQUES DE NO-DANY:
+   - _alloc()/reserve(): si existeix → TTY pregunta s/N; sense TTY → es
+     CONSERVA i s'avisa (mai destrueix codi teva; el test
+     test_start_no_sobreescriveix_sense_forcar ho cobreix). --force
+     sobrescriu (amb avís).
+   - Crea sempre README.md; autor del config a totes les capçaleres.
+   - stdout només imprimeix la ruta final (per coherència amb el wrapper i
+     per ser pipeable: `cd $(python3 dam.py start x.pdf --dest ...)`).
+
+F) ASIGNATURA: la deducció és en cascada: --asignatura > "Asignatura: X" al
+   text del PDF > primer tros de la destinació que NO sembli codi d'unitat
+   (UDx/UFx/TemaN/PràcticaN) dins d'una root > prefix del nom del PDF
+   (matematicas_practica1.pdf → "matematicas"; "cuestionario" etc. no
+   compten com a assignatura) > "-".
+
+----------------------------------------------------------------------------
+7. TESTS (python3 -m tests.test_dam)
+----------------------------------------------------------------------------
+14 proves end-to-end que cobrixen els criteris d'acceptació de l'enunciat:
+go a arrels / sense resultat no peta / ruta extra ignora config / `go .` /
+triar fitxer → seva carpeta / last i historial / last buit no peta / ver
+amaga node_modules i ocultos, -a i --build els mostren, --depth talla /
+qüestionari (preguntes + autor, sense respostes) / .php buit amb capçalera i
+sense `echo` / web amb header/nav/main/footer / no sobrescriure sense --force /
+.odb zip vàlid amb office:database / conf i --help llisten els comandaments.
+Cada test fa servir HOME temporal real i PDFs generats pel mini-generador
+propi (tests/make_test_pdfs.py escriu PDFs mínims PDF-1.4 vàlids, amb
+FlateDecode; els mateixos que valida minipdf: així el pipeline PDF→text→
+detecció es posa a prova de veritat, no amb mocks).
+Els tests passen SENSE instal·lar res: python-docx/odfpy/odf són opcionals
+cada generador degrada o avisa (aquesta decisió va ser del client: entorn
+sense pip; quan els instal·lis, .docx/.odt/.ods es generen de veritat).
+
+----------------------------------------------------------------------------
+8. DECISIONS DE DISSENY QUE PREGUNTA LA TEVA CAPÇALERA
+----------------------------------------------------------------------------
+- Argparse pur + subcomandaments; ajuda en castellà a --help i per
+  comandament (epílegs amb exemples i explicació del wrapper).
+- El dict de claus vive solo en dam/detection/keywords.py amb comentaris
+  perquè el puguis editar sense tocar lògica.
+- prompt_toolkit (ja era a dist-packages), fzf si existeix, fallback llista:
+  el CLI mai queda inservible per falta d'una lib.
+- Minipdf propi: l'enunciat exigia que `start` llegís PDFs; com que pip no
+  hi era, la versió sense dependències va ser la única manera de demostrar
+  el pipeline. No és un visor: només el suficient per DETECTAR.
+- Els comandaments extra `edit` i `conf` surten de la línia del teu stack
+  ("editor = code"); `--help` general llista els 4 del contracte primer i
+  aquests dos darrere.
+
+----------------------------------------------------------------------------
+9. QUÈ LI FALTARIA (honest)
+----------------------------------------------------------------------------
+- No puc verificar .docx/.odt/.ods reals en aquest equip (sense libs). El
+  codi usa les API estàndard de python-docx/odfpy; en el teu PC amb
+  `pip install -r requirements.txt` hauria d'anar dret. El camí .txt del
+  qüestionari i l'estructura .odb sí que estan verificats aquí.
+- PDFs escanejats (imatge) no: caldria OCR, fora d'abast.
+- minipdf no entén objectes comprimits creuats de PDFs moderns molt rars
+  (xref streams, object streams); per això pdfplumber va davant.
+============================================================================

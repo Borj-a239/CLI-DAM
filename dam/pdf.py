@@ -71,6 +71,7 @@ def read_pdf(path: Path) -> str:
     err(
         "no he podido extraer texto del PDF.\n"
         "  - Si es un PDF escaneado (imagen), necesitarás OCR.\n"
-        "  - Si faltan librerías:  python3 -m pip install pdfplumber pypdf"
+        "  - Si faltan librerías:  python3 -m pip install pdfplumber pypdf\n"
+        "    (sin ellas solo uso el parser interno, que no entiende PDFs raros)"
     )
     return ""

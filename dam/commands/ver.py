@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 from typing import List
 
 from ..config import Config
-from ..util import err
+from ..util import err, expand_home
 
 BUILD_JUNK = {
     "target",
@@ -77,7 +78,7 @@ class VerCommand:
 
     @staticmethod
     def run(args: argparse.Namespace, cfg: Config) -> int:
-        root = os.path.abspath(os.path.expanduser(args.path))
+        root = str(expand_home(args.path).resolve())
         if not os.path.isdir(root):
             err(f"'{args.path}' no es una carpeta válida.")
 
@@ -120,19 +121,21 @@ def walk_tree(root: str, depth: int, args, show_hidden: bool, show_build: bool) 
         (dirs if is_dir else files).append(child)
 
     total = len(dirs) + len(files)
-    for i, child in enumerate(dirs + files):
-        last = i == total - 1
+    for i, child in enumerate(dirs):
+        last_dir = not files and i == len(dirs) - 1
+        connector = "└── " if last_dir else "├── "
+        print("    " * depth + connector + child.name + "/")
+        walk_tree(
+            child.path,
+            depth + 1,
+            args,
+            show_hidden=show_hidden,
+            show_build=show_build,
+        )
+    for j, child in enumerate(files):
+        last = j == len(files) - 1
         connector = "└── " if last else "├── "
-        suffix = "/" if child in dirs else ""
-        print("    " * depth + connector + child.name + suffix)
-        if child in dirs:
-            walk_tree(
-                child.path,
-                depth + 1,
-                args,
-                show_hidden=show_hidden,
-                show_build=show_build,
-            )
+        print("    " * depth + connector + child.name)
 
 
 def register(subparsers) -> None:

@@ -1,4 +1,4 @@
-"""Estat persistent a ~/.dam/state.json: historial per a `dam last`."""
+"""Estado persistente en ~/.dam/state.json: historial para `dam last`."""
 from __future__ import annotations
 
 import json
@@ -6,15 +6,25 @@ import os
 from pathlib import Path
 from typing import List
 
-STATE_DIR = Path.home() / ".dam"
-STATE_PATH = STATE_DIR / "state.json"
+from .util import home_dir
+
+
+
+def state_dir() -> Path:
+    return home_dir() / ".dam"
+
+
+def state_path() -> Path:
+    """Resolt a cada crida: ~/.dam/state.json (respecta el HOME del moment)."""
+    return state_dir() / "state.json"
 MAX_HISTORY = 200
 
 
 def _read_state() -> dict:
-    if STATE_PATH.exists():
+    path = state_path()
+    if path.exists():
         try:
-            return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+            return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return {}
     return {}
@@ -22,8 +32,8 @@ def _read_state() -> dict:
 
 def _write_state(state: dict) -> None:
     try:
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
-        STATE_PATH.write_text(
+        state_dir().mkdir(parents=True, exist_ok=True)
+        state_path().write_text(
             json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
         )
     except OSError:
@@ -36,7 +46,7 @@ def history() -> List[str]:
 
 
 def record(path: str) -> None:
-    """Afegeix una ruta a l'historial (més recent al final)."""
+    """Añade una ruta al historial (la más reciente al final)."""
     state = _read_state()
     hist = state.get("hist", [])
     if not isinstance(hist, list):
@@ -49,15 +59,15 @@ def record(path: str) -> None:
 
 
 def get(index: int) -> str:
-    """Ruta N-èsima comatgem enrere des de l'actual.
+    """Ruta N-ésima hacia atrás desde la actual.
 
-    index=0 → la darrera visitada; index=1 → l'anterior a l'actual; etc.
+    index=0 → la última visitada; index=1 → la anterior a la actual; etc.
     """
     hist = history()
     if not hist:
-        raise IndexError("l'historial és buit; fes primer un 'dam go'")
+        raise IndexError("el historial está vacío; haz primero un 'dam go'")
     if index < 0 or index >= len(hist):
         raise IndexError(
-            f"no hi ha {index + 1} entrades a l'historial (n'hi ha {len(hist)})"
+            f"no hay {index + 1} entradas en el historial (hay {len(hist)})"
         )
     return hist[-1 - index]

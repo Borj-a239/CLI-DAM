@@ -1,4 +1,4 @@
-"""Índex perezós del disc amb caché a ~/.dam/cache/<hash>.json."""
+"""Índice perezoso del disco con caché en ~/.dam/cache/<hash>.json."""
 from __future__ import annotations
 
 import hashlib
@@ -10,8 +10,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional
 
-CACHE_DIR = Path.home() / ".dam" / "cache"
-CACHE_TTL = 10 * 60  # segons; a més, si l'arrel és més nova que la caché, cau
+from .util import home_dir
+
+
+
+def cache_dir() -> Path:
+    """Resolt a cada crida: ~/.dam/cache (respecta el HOME del moment)."""
+    return home_dir() / ".dam" / "cache"
+
+CACHE_TTL = 10 * 60  # segundos; si la raíz es más nueva que la caché, cae
 
 
 @dataclass(frozen=True)
@@ -26,11 +33,11 @@ class Entry:
 
 def _cache_file(root: Path) -> Path:
     digest = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:32]
-    return CACHE_DIR / f"{digest}.json"
+    return cache_dir() / f"{digest}.json"
 
 
 def _walk(root: Path) -> Iterator[Entry]:
-    """Recorre sense petar mai: permissions denegades s'ignoren en silenci."""
+    """Recorre sin petar nunca: los permisos denegados se ignoran en silencio."""
     stack = [str(root)]
     while stack:
         current = stack.pop()
@@ -71,7 +78,7 @@ def _load_cached(root: Path) -> Optional[List[Entry]]:
 
 def _save_cache(root: Path, entries: List[Entry]) -> None:
     try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_dir().mkdir(parents=True, exist_ok=True)
         payload = {
             "root": str(root),
             "built_at": time.time(),
@@ -85,7 +92,7 @@ def _save_cache(root: Path, entries: List[Entry]) -> None:
 
 
 def index_root(root: Path, reindex: bool = False) -> List[Entry]:
-    """Índex complet d'una arrel; reutilitza la caché si es pot."""
+    """Índice completo de una raíz; reutiliza la caché si se puede."""
     root = root.resolve()
     if not root.is_dir():
         return []

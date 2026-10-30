@@ -1,4 +1,4 @@
-"""Lectura i escriptura de la configuració a ~/.damrc (format clau = valor)."""
+"""Lectura y escritura de la configuración en ~/.damrc (formato clave = valor)."""
 from __future__ import annotations
 
 import os
@@ -6,7 +6,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-CONFIG_PATH = Path.home() / ".damrc"
+from .util import expand_home, home_dir
+
+
+
+def config_path() -> Path:
+    """Resuelto en cada llamada: ~/.damrc (respeta el HOME del momento)."""
+    return home_dir() / ".damrc"
+
+
 
 DEFAULT_ROOTS = ["~/DAM"]
 
@@ -27,7 +35,7 @@ def _split_list(raw: str) -> List[str]:
 
 def load_config(path: Optional[Path] = None) -> Config:
     """Parseja ~/.damrc. Ignora silenciosament línies malformades."""
-    cfg_path = path or CONFIG_PATH
+    cfg_path = path or config_path()
     raw_roots: List[str] = []
     autor = ""
     editor = ""
@@ -51,26 +59,28 @@ def load_config(path: Optional[Path] = None) -> Config:
 
     roots: List[Path] = []
     for item in raw_roots:
-        expanded = Path(os.path.expandvars(item)).expanduser()
+        expanded = expand_home(item)
         if expanded.is_dir():
             roots.append(expanded.resolve())
     return Config(roots=roots, autor=autor, editor=editor or "xdg-open")
 
 
 def ensure_config() -> Path:
-    """Crea ~/.damrc amb valors per defecte si no existeix. Retorna el camí."""
-    if CONFIG_PATH.exists():
-        return CONFIG_PATH
+    """Crea ~/.damrc con valores por defecto si no existe. Devuelve la ruta."""
+    target = config_path()
+    if target.exists():
+        return target
     example_roots = ", ".join(DEFAULT_ROOTS)
     content = (
-        "# Configuració de dam (format: clau = valor)\n"
-        f"# roots: llista de carpetes on buscar, separades per comes (sense límit)\n"
+        "# Configuración de dam (formato: clave = valor)\n"
+        f"# roots: lista de carpetas donde buscar, separadas por comas (sin límite)\n"
         f"roots = {example_roots}\n"
-        "autor = El teu Nom\n"
+        "autor = Tu Nombre\n"
         "editor = code\n"
     )
     try:
-        CONFIG_PATH.write_text(content, encoding="utf-8")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
     except OSError:
         pass
-    return CONFIG_PATH
+    return target

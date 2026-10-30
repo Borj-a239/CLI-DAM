@@ -3,14 +3,15 @@
 Cubre el subconjunto necesario para *detectar el tipo* de práctica (no es un
 visor): objetos `N 0 obj`, flujos planos y FlateDecode, operadores BT/T*/ET,
 Tj/'/" y arrays TJ, literales (..) y hex <..>, y ToUnicode (bfchar/bfrange).
-Si algo es raro, se ignora ese trozo sin petar nunca.
+Si algo es raro, se ignora ese trozo sin fallar nunca.
 """
 from __future__ import annotations
 
 import re
 import zlib
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 OBJ_RE = re.compile(rb"(\d+)\s+0\s+obj(.*?)endobj", re.DOTALL)
 STREAM_RE = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.DOTALL)
@@ -26,10 +27,13 @@ BFHAT_PAIR_RE = re.compile(rb"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>")
 BFHAT_TRIPLE_RE = re.compile(
     rb"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>"
 )
+# Operadors de text suportats. Els grups són:
+#  g1: simple (Tf/Tj/TJ/BT/ET/T*)  g2,g3: par de coordenades (Td/TD o Tm)
+#  g4: "Td|TD"  g5: "Tm" (amb sol el par e f, assumim matriu identitat)
 OPERATOR_RE = re.compile(
-    rb"\b(Tj|TJ|Tf|T\*|TD|Td|BT|ET|Tm|(\d+(?:\.\d+)?)\s+0\s+0\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+Tm)\b"
-    rb"|\b(-?[\d.]+)\s+(-?[\d.]+)\s+Td\b"
-    rb"|\b(-?[\d.]+)\s+(-?[\d.]+)\s+TD\b"
+    rb"(?<![\w])(Tf|Tj|TJ|BT|ET|T\*)(?![\w])"
+    rb"|(-?[\d.]+)[ \t]+(-?[\d.]+)[ \t]+(Td|TD)(?![\w])"
+    rb"|(-?[\d.]+)[ \t]+(-?[\d.]+)[ \t]+Tm(?![\w])"
 )
 LITERAL_RE = re.compile(rb"\((?:\\.|[^\\()])*\)|<([0-9A-Fa-f\s]*)>")
 
@@ -190,100 +194,117 @@ def _unicode_map(model: PdfModel, font_body: bytes) -> Optional[Dict[int, str]]:
 def _text_for_content(
     model: PdfModel, content: bytes, fonts: Dict[str, FontInfo]
 ) -> str:
+    """Reconstruye el texto rastreando la posición real (Td/TD/Tm) de cada trozo.
+
+    Reglas:
+      - T* fuerza salto de línea (así lo emiten la mayoría de generadores).
+      - Td/TD/Tm: si cambiamos de coordenada Y => línea nueva; si en la misma
+        línea el trozo empieza separado del último carácter emitido, insertamos
+        un espacio (así se separan palabras cuando el PDF las pinta en Tj
+        separados sin espacios literales).
+    """
     fallback: Optional[FontInfo] = next(
-        (f for f in fonts.values() if f.cmap or f.width_by_code), None
+        (f for f in fonts.values() if f.cmap), None
     )
-    current_alias: str = ""
-    out: List[str] = []
-    x = 0.0
-    y = 0.0
-    start_y: Optional[float] = None
-    first_token = True
-
-    def current_font() -> FontInfo:
-        return fonts.get(current_alias) or fallback or FontInfo()
-
-    def emit(text: str) -> None:
-        nonlocal x
-        if not text:
-            return
-        font = current_font()
-        gap = _word_gap(text, font, x)
-        if gap is not None and out and not out[-1].endswith("\n"):
-            out.append(" " if gap > 0 else "")
-        if gap and gap < 0:
-            out.append(" ")
-        out.append(text)
-        x += _rendered_width(text, font)
-
+    state = _TextState(fonts, fallback)
+    in_text = False
     for match in OPERATOR_RE.finditer(content):
-        operator = match.group(0)
+        simple = match.group(1)
         operands = content[max(0, match.start() - 4096) : match.start()]
-        if operator == b"Tf":
+        if simple == b"BT":
+            in_text = True
+        elif simple == b"ET":
+            state.newline()
+            in_text = False
+        elif not in_text:
+            continue
+        elif simple == b"Tf":
             alias = re.search(rb"/(\w+)\s+[\d.]*$", operands)
             if alias:
-                current_alias = alias.group(1).decode(errors="ignore")
-        elif operator == b"Tj":
+                state.alias = alias.group(1).decode(errors="ignore")
+        elif simple == b"Tj":
             literal = _last_literal(operands)
             if literal is not None:
-                emit(_decode_literal(literal, current_font().cmap or None))
-        elif operator == b"TJ":
+                state.emit(_decode_literal(literal, state.font().cmap or None))
+        elif simple == b"TJ":
             for literal in LITERAL_RE.finditer(_literal_region(operands)):
-                emit(_decode_literal(literal.group(0), current_font().cmap or None))
-        elif b"Tm" in operator and match.lastindex and len(match.groups()) >= 5:
-            try:
-                x = float(match.group(4)) if match.group(4) else x
-                y_new = float(match.group(5)) if match.group(5) else y
-            except (TypeError, ValueError, IndexError):
-                y_new = y
-            _maybe_newline(out, y_new, y, x, start_y)
-            y = y_new
+                state.emit(_decode_literal(literal.group(0), state.font().cmap or None))
+        elif simple == b"T*":
+            state.newline()
+        elif match.group(4) in (b"Td", b"TD"):  # "x y Td" / "tx ty TD"
+            state.move(float(match.group(2)), float(match.group(3)), absolute=False)
+        elif match.group(5) is not None:
+            # "... e f Tm": només ens cal l'origen (e, f) absolut
+            state.move(float(match.group(5)), float(match.group(6)), absolute=True)
+    return state.result()
+
+
+class _TextState:
+    def __init__(self, fonts: Dict[str, FontInfo], fallback: Optional[FontInfo]) -> None:
+        self.fonts = fonts
+        self.fallback = fallback
+        self.alias = ""
+        self.out: List[str] = []
+        self.x = 0.0
+        self.y = 0.0
+        self.last_end: Optional[float] = None
+
+    def font(self) -> FontInfo:
+        return self.fonts.get(self.alias) or self.fallback or FontInfo()
+
+    def emit(self, text: str) -> None:
+        """Pinta text a la posició actual; si l'origen queda lluny del final
+        del text anterior, insereix un espai (paraules pintades en Tj separats).
+        """
+        if not text:
+            return
+        font = self.font()
+        if self.out and not self.out[-1].endswith("\n") and self.last_end is not None:
+            if self.x - self.last_end > self.space_width(font) * 0.5:
+                self.out.append(" ")
+        width = _string_width(text, font)
+        self.out.append(text)
+        if width:
+            self.last_end = self.x + width
         else:
-            td = _coord_pair(operator, b"Td") or _coord_pair(operator, b"TD")
-            if td is not None:
-                tx, ty = td
-                _maybe_newline(out, y + ty, y, x + tx, start_y)
-                x += tx
-                y += ty
-            elif operator == b"BT":
-                pass
-            elif operator == b"T*":
-                if out and not out[-1].endswith("\n"):
-                    out.append("\n")
-                    x = start_y and x or x
-            elif operator == b"ET":
-                if out and not out[-1].endswith("\n"):
-                    out.append("\n")
+            # font sense widths conegudes: aproximem per nombre de caràcters
+            self.last_end = self.x + len(text) * self.space_width(font) * 0.5
 
-    text = "".join(out)
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r" ?\n ?", "\n", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text
+    def move(self, dx: float, dy: float, absolute: bool) -> None:
+        """Td/TD (relatiu) i Tm (absoluto):Y diferent => línia nova."""
+        new_x = dx if absolute else self.x + dx
+        new_y = dy if absolute else self.y + dy
+        if new_y != self.y:
+            self.newline()
+            self.last_end = None
+        self.x = new_x
+        self.y = new_y
 
+    def newline(self) -> None:
+        if self.out and not self.out[-1].endswith("\n"):
+            self.out.append("\n")
 
-def _maybe_newline(out: List[str], new_y: float, old_y: float, new_x: float, start_x: Optional[float]) -> None:
-    """Salto de línea solo si la posición real del texto cambia de línea."""
-    if new_y != old_y and out and not out[-1].endswith("\n"):
-        out.append("\n")
+    def space_width(self, font: FontInfo) -> float:
+        width = font.width_by_code.get(32)
+        if width:
+            return width
+        return font.default_width or 250.0
 
-
-def _coord_pair(operator: bytes, name: bytes) -> Optional[Tuple[float, float]]:
-    match = re.fullmatch(
-        rb"(-?[\d.]+)\s+(-?[\d.]+)\s+" + name + rb"", operator
-    )
-    if not match:
-        return None
-    return float(match.group(1)), float(match.group(2))
+    def result(self) -> str:
+        text = "".join(self.out)
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r" ?\n ?", "\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text
 
 
-def _rendered_width(text: str, font: FontInfo) -> float:
-    return float(len(text))  # aprox. neutra: el heurístico no depende de esto
-
-
-def _word_gap(text: str, font: FontInfo, x: float) -> Optional[int]:
-    return None
-
+def _string_width(text: str, font: FontInfo) -> float:
+    if not font.width_by_code:
+        return 0.0
+    total = 0.0
+    for char in text:
+        total += font.width_by_code.get(ord(char), font.default_width or 500.0)
+    return total
 
 
 def _last_literal(operands: bytes) -> Optional[bytes]:

@@ -14,10 +14,10 @@ from ..detection.detector import Detection, detect
 from ..pdf import read_pdf
 from ..templates.code import infer_package, write_java_project, write_js, write_sql
 from ..templates.data import write_odb, write_ods
-from ..templates.documents import write_questions
+from ..templates.documents import write_questions, write_questions_txt
 from ..templates.plain import write_plain, write_readme
-from ..templates.web import write_web
-from ..util import err, info, warn
+from ..templates.web import write_web, write_web_targets
+from ..util import err, expand_home, info, warn
 
 SLUG_RE = re.compile(r"[^A-Za-z0-9._-]+")
 PRACTICE_EXT_RE = re.compile(
@@ -64,6 +64,12 @@ class StartCommand:
         )
         parser.add_argument("pdf", help="ruta al PDF del enunciado")
         parser.add_argument(
+            "--asignatura",
+            default=None,
+            metavar="ASIGNATURA",
+            help="asignatura para el README y los documentos (si no, se deduce)",
+        )
+        parser.add_argument(
             "--dest",
             default=None,
             metavar="ASIGNATURA/PRACTICA",
@@ -84,15 +90,15 @@ class StartCommand:
 
     @staticmethod
     def run(args: argparse.Namespace, cfg: Config) -> int:
-        pdf_path = Path(os.path.expandvars(args.pdf)).expanduser()
+        pdf_path = expand_home(args.pdf)
         text = read_pdf(pdf_path)
         if not text.strip():
-            err("el PDF no té text llegible (escanejat?). No puc detectar el tipus.")
+            err("el PDF no tiene texto legible (¿escaneado?). No puedo detectar el tipo.")
 
         detection = detect(text)
         dest = resolve_dest(pdf_path, args.dest, cfg)
-        title = pdf_path.stem.replace("_", " ").replace("-", " ").strip() or "Práctica"
-        subject = subject_from(dest, cfg)
+        title = pdf_title(pdf_path)
+        subject = args.asignatura or subject_from(dest, cfg, args.pdf)
         options = Options(force=args.force, odt=args.odt)
 
         info(f"PDF: {pdf_path}")
@@ -112,7 +118,7 @@ class StartCommand:
 
 def resolve_dest(pdf_path: Path, dest_arg: Optional[str], cfg: Config) -> Path:
     if dest_arg:
-        dest = Path(os.path.expandvars(dest_arg)).expanduser()
+        dest = expand_home(dest_arg)
         if not dest.is_absolute() and cfg.roots:
             dest = cfg.roots[0] / dest
         return dest.resolve()
@@ -122,33 +128,82 @@ def resolve_dest(pdf_path: Path, dest_arg: Optional[str], cfg: Config) -> Path:
         info(f"Sin --dest y sin TTY: uso {default}")
         return default
 
-    info(f"Cap --dest. Opció deduïda: {default}")
+    info(f"Sin --dest. Opción deducida: {default}")
     try:
-        raw = input("Carpetona on crear-la [Intro = deduïda]: ").strip()
+        raw = input("Carpeta donde crearla [Intro = deducida]: ").strip()
     except (KeyboardInterrupt, EOFError):
         return default
     if not raw:
         return default
-    chosen = Path(os.path.expandvars(raw)).expanduser()
+    chosen = expand_home(raw)
     if not chosen.is_absolute() and cfg.roots:
         chosen = cfg.roots[0] / chosen
     return chosen.resolve()
 
 
-def subject_from(dest: Path, cfg: Config) -> str:
-    """Assignatura = primer tros de la ruta que coincideix amb una root filla."""
+GENERIC_STEMS = {"cuestionario", "cuestionari", "test", "examen", "practica", "practica1", "practica2", "practica3", "practica4", "practica5", "practica6", "practica7", "practica8", "practica9"}
+
+ASIG_RE = re.compile(r"^(asix|daw|dam|daw2|asix2|ud\d+|uf\d+|tema\d+|practica\d*)$", re.IGNORECASE)
+
+
+SUBJECT_TOKEN_RE = re.compile(
+    r"(?i)\b(?:asignatura|materia|matèria|subject)\s*[:=—-]+\s*([^\n]{3,60})"
+)
+
+
+def pdf_title(pdf_path: Path) -> str:
+    return pdf_path.stem.replace("_", " ").replace("-", " ").strip() or "Práctica"
+
+
+def subject_from_filename(pdf_name: str) -> str:
+    """matematicas_practica1.pdf -> matematicas; guion/barrabaix sota ratlla."""
+    stem = Path(pdf_name).stem
+    for sep in ("_", "-", "."):
+        if sep in stem:
+            head = stem.split(sep)[0].strip()
+            head_l = head.lower()
+            if (
+                2 <= len(head) <= 40
+                and not ASIG_RE.match(head)
+                and head_l not in GENERIC_STEMS
+            ):
+                return head.replace("_", " ").replace("-", " ")
+    return ""
+
+
+def subject_hint_from_text(text: str) -> str:
+    """Si el PDF dice "Asignatura: X", devuelve X. Nada más no se inventa."""
+    match = SUBJECT_TOKEN_RE.search(text)
+    if match:
+        return match.group(1).strip().rstrip(".;")
+    return ""
+
+
+def subject_from(dest: Path, cfg: Config, pdf_name: str = "") -> str:
+    """Asignatura, en este orden: "Asignatura:" del PDF, --asignatura, tramo
+    de la ruta dentro de una root, o "-" si no se puede deducir.
+
+    Reglas de la ruta: dentro de una root, si el primer tramo no parece un
+    código de unidad (UDx/TemaN/PrácticaN), es la asignatura; si lo parece,
+    se busca el siguiente tramo que no lo sea.
+    """
+    hint = subject_from_filename(pdf_name)
+    if hint:
+        return hint
     for root in cfg.roots:
         try:
             relative = dest.relative_to(root)
-            if relative.parts:
-                return relative.parts[0]
         except ValueError:
             continue
-    for part in reversed(dest.parts):
-        if part in {Path.home().name, ""}:
-            break
-        if len(part) > 2 and not part.startswith("."):
-            return part
+        parts = list(relative.parts)
+        if not parts:
+            continue
+        if not ASIG_RE.match(parts[0]) and len(parts) > 1:
+            return parts[0]
+        for part in parts:
+            if not ASIG_RE.match(part):
+                return part
+        return parts[0]
     return "-"
 
 
@@ -170,9 +225,17 @@ def generate(
         doc = write_questions(dest, slugify(title), autor, subject, det.questions, prefer_odt=opts.odt)
         if doc:
             created.append(doc)
+        else:
+            warn("sin python-docx/odfpy: el cuestionario queda como .txt (instálalas para .docx/.odt)")
+            path = _alloc(dest / f"{slugify(title)}.cuestionario.txt", opts)
+            if path:
+                created.append(
+                    write_questions_txt(path, title, autor, subject, det.questions)
+                )
 
     if det.wants_web:
-        created += write_web(dest, autor, title)
+        for candidate in _reserve(write_web_targets(dest), opts, dest):
+            created.append(write_web(dest, autor, title, target=candidate))
 
     if ttype == "sql" or det.sql_tables or det.sql_selects:
         path = _alloc(dest / "practica.sql", opts)
@@ -195,7 +258,7 @@ def generate(
         if path:
             try:
                 created.append(write_ods(path, slugify(title)[:28] or "Hoja1", det.calc_headers, autor))
-            except SystemExit:
+            except LookupError:
                 fallback = _alloc(dest / "practica_csv_headers.txt", opts)
                 if fallback:
                     fallback.write_text(
@@ -209,10 +272,10 @@ def generate(
         if path:
             try:
                 created.append(write_odb(path, det.db_tables, autor))
-            except SystemExit:
-                warn("falta odfpy: no puc generar el .odb (instal·la odfpy)")
+            except LookupError:
+                warn("falta odfpy: no puedo generar el .odb (instálala)")
 
-    # Capa 2: fallback regex — qualsevol .extensio esmentada al PDF → fitxer buit
+    # Capa 2: fallback regex — cualquier .extensión mencionada => fichero vacío
     skip = {"pdf", "doc", "docx", "odt", "ods", "odp", "png", "jpg", "jpeg", "gif",
             "zip", "rar", "7z", "exe", "msi", "iso", "deb", "mp4", "mp3", "svg",
             "usa", "r", "en", "la", "el", "com", "org", "es", "uk"}
@@ -224,20 +287,26 @@ def generate(
         if ext not in skip and stem not in named:
             named[ext] = stem
 
+    web_targets = {p.name.lower() for p in write_web_targets(dest)} if det.wants_web else set()
+
     for ext in det.extensions:
         if ext in skip:
             continue
+        candidate_base = named.get(ext) or (slugify(title[:20]) or "practica")
         if ext in rich_owns and not named.get(ext):
-            if ext in {"html", "htm", "css"} and det.wants_web:
+            if ext in {"html", "htm", "css"}:
+                if det.wants_web:
+                    continue  # la plantilla web ya cubre index.html + estilos.css
+                candidate_base = "practica"
+            elif ext == "js" and (ttype == "js" or det.js_functions):
                 continue
-            if ext == "js" and (ttype == "js" or det.js_functions):
+            elif ext == "sql" and (ttype == "sql" or det.sql_tables):
                 continue
-            if ext == "sql" and (ttype == "sql" or det.sql_tables):
+            elif ext == "java" and ttype == "java":
                 continue
-            if ext == "java" and ttype == "java":
-                continue
-        base = named.get(ext) or (slugify(title[:20]) or "practica")
-        path = _alloc(dest / f"{base}.{ext}", opts)
+        elif ext in rich_owns and f"{candidate_base}.{ext}" in web_targets:
+            continue
+        path = _alloc(dest / f"{candidate_base}.{ext}", opts)
         if path:
             created.append(write_plain(path, autor, title))
 
@@ -250,7 +319,7 @@ def slugify(text: str) -> str:
 
 
 def _alloc(path: Path, opts: Options) -> Optional[Path]:
-    """Ruta on escriure, respectant 'no sobreescriure sense avisar'."""
+    """Ruta donde escribir, respetando 'no sobreescribir sin avisar'."""
     if path.exists():
         if opts.force:
             warn(f"reescriuré (--force): {path.name}")
@@ -271,3 +340,24 @@ def _alloc(path: Path, opts: Options) -> Optional[Path]:
 
 def register(subparsers) -> None:
     StartCommand.subparser(subparsers)
+
+
+def _reserve(paths: List[Path], opts: Options, dest: Path) -> List[Path]:
+    """Aplica la política de no-sobrescribir a ficheros generados en bloque."""
+    result: List[Path] = []
+    for path in paths:
+        if not path.exists():
+            result.append(path)
+            continue
+        if opts.force:
+            warn(f"reescribiré (--force): {path.name}")
+            result.append(path)
+            continue
+        if sys.stdin.isatty():
+            answer = input(f"YA existe {path} — ¿sobrescribir? [s/N]: ").strip().lower()
+            if answer in {"s", "si", "sí", "y", "yes"}:
+                result.append(path)
+            continue
+        warn(f"existe {path.name} sin --force: se conserva y se omite")
+    return result
+

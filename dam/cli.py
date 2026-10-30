@@ -16,6 +16,8 @@ Comandos disponibles:
   start     Lee un PDF de enunciado y crea la plantilla vacía que toca
   ver       Muestra el árbol de la carpeta actual (solo lectura, sin cd)
   last      Vuelve a una ruta del historial (cd real vía wrapper)
+  edit      Abre el editor del config en la carpeta actual (o la que digas)
+  conf      Muestra (o abre) la configuración ~/.damrc
 
 IMPORTANTE (el wrapper): un proceso hijo NO puede hacer cd al padre.
 Por eso debes añadir a tu ~/.bashrc la función de dam.bash:
@@ -44,7 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version", action="version", version=f"dam {__version__}"
     )
-    subparsers = parser.add_subparsers(dest="command", metavar="{go,start,ver,last}")
+    subparsers = parser.add_subparsers(
+        dest="command", metavar="{go,start,ver,last,edit,conf}"
+    )
     nav.register(subparsers)
     start.register(subparsers)
     ver.register(subparsers)
