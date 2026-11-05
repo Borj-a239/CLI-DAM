@@ -21,7 +21,7 @@ def write_ods(
 
     doc = OpenDocumentSpreadsheet()
     header_style = Style(name="HeaderCell", family="table-cell")
-    header_style.addElement(TableCellProperties(fontweight="bold"))
+    header_style.addElement(TableCellProperties(font_weight="bold"))
     doc.styles.addElement(header_style)
 
     table = Table(name=sheet_name[:31] or "Hoja1")

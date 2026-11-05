@@ -105,9 +105,10 @@ class StartCommand:
         info(f"Tipo detectado: {detection.primary or 'fallback por extensiones'}")
         created: List[Path] = []
         created += generate(detection, text, dest, title, subject, cfg.autor, options)
-        created.append(write_readme(dest, title, subject, cfg.autor, [
-            str(p.relative_to(dest)) for p in created
-        ]))
+        if _reserve([dest / "README.md"], options, dest):
+            created.append(write_readme(dest, title, subject, cfg.autor, [
+                str(p.relative_to(dest)) for p in created
+            ]))
 
         info(f"\nPlantilla vacía creada en: {dest}")
         for path in created:
@@ -221,8 +222,20 @@ def generate(
 
     ttype = det.primary
 
+    def rich_ok(kind: str) -> bool:
+        """Un cuestionario con preguntas reales no arrastra plantillas de
+        tipos secundarios (hablar de "bases de dades" en el enunciado no
+        significa que haya que montar un .odb). Solo si el otro tipo puntuaba
+        tanto o más que el cuestionario."""
+        if ttype != "cuestionario" or not det.questions:
+            return True
+        return det.scores.get(kind, 0.0) >= det.scores.get("cuestionario", 0.0)
+
     if ttype == "cuestionario" and (det.questions or det.scores.get("cuestionario", 0) > 0):
-        doc = write_questions(dest, slugify(title), autor, subject, det.questions, prefer_odt=opts.odt)
+        doc = write_questions(
+            dest, slugify(title), autor, subject, det.questions,
+            prefer_odt=opts.odt, alloc=lambda name: _alloc(dest / name, opts),
+        )
         if doc:
             created.append(doc)
         else:
@@ -233,16 +246,16 @@ def generate(
                     write_questions_txt(path, title, autor, subject, det.questions)
                 )
 
-    if det.wants_web:
+    if det.wants_web and (rich_ok("html") or rich_ok("css")):
         for candidate in _reserve(write_web_targets(dest), opts, dest):
             created.append(write_web(dest, autor, title, target=candidate))
 
-    if ttype == "sql" or det.sql_tables or det.sql_selects:
+    if (ttype == "sql" or det.sql_tables or det.sql_selects) and rich_ok("sql"):
         path = _alloc(dest / "practica.sql", opts)
         if path:
             created.append(write_sql(path, det.sql_tables, det.sql_selects, autor, title))
 
-    if ttype == "js" or det.js_functions:
+    if (ttype == "js" or det.js_functions) and rich_ok("js"):
         path = _alloc(dest / "practica.js", opts)
         if path:
             created.append(write_js(path, det.js_functions, autor, title))
@@ -253,7 +266,7 @@ def generate(
             dest, det.java_classes, det.java_methods, det.calc_headers, package, autor, title
         )
 
-    if ttype == "calc" or (det.calc_headers and ttype not in {"java", "sql", "base"}):
+    if (ttype == "calc" or (det.calc_headers and ttype not in {"java", "sql", "base"})) and rich_ok("calc"):
         path = _alloc(dest / "practica.ods", opts)
         if path:
             try:
@@ -267,7 +280,7 @@ def generate(
                     created.append(fallback)
                     warn("falta odfpy: he deixat les capçaleres a un .txt")
 
-    if ttype == "base" or det.db_tables:
+    if (ttype == "base" or det.db_tables) and rich_ok("base"):
         path = _alloc(dest / "base.odb", opts)
         if path:
             try:

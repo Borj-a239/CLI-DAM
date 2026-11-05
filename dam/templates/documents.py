@@ -104,31 +104,40 @@ def _missing_library() -> bool:
 
 
 def write_questions(
-    dest_dir: Path, base: str, autor: str, subject: str, questions: List[str], prefer_odt: bool = False
+    dest_dir: Path,
+    base: str,
+    autor: str,
+    subject: str,
+    questions: List[str],
+    prefer_odt: bool = False,
+    alloc=None,
 ) -> Optional[Path]:
     """Crea el cuestionario en .docx (o .odt si se prefiere / falta docx).
 
     Devuelve None si ni python-docx ni odfpy están instalados: el caller
-    degrada a un .txt y avisa cómo instalar las libs.
+    degrada a un .txt y avisa cómo instalar las libs. `alloc(nombre)` es
+    opcional y aplica la política no-sobrescribir del caller (start).
     """
-    if prefer_odt:
+    skipped = object()
+
+    def attempt(ext: str, writer) -> Optional[Path]:
+        path = alloc(f"{base}.{ext}") if alloc else dest_dir / f"{base}.{ext}"
+        if path is None:
+            return skipped
         try:
-            return write_odt_questions(
-                dest_dir / f"{base}.odt", base, autor, subject, questions
-            )
-        except LookupError:
-            pass
-    try:
-        return write_docx_questions(
-            dest_dir / f"{base}.docx", base, autor, subject, questions
-        )
-    except LookupError:
-        try:
-            return write_odt_questions(
-                dest_dir / f"{base}.odt", base, autor, subject, questions
-            )
+            return writer(path, base, autor, subject, questions)
         except LookupError:
             return None
+
+    order = ("odt", "docx") if prefer_odt else ("docx", "odt")
+    writers = {"odt": write_odt_questions, "docx": write_docx_questions}
+    for ext in order:
+        result = attempt(ext, writers[ext])
+        if result is skipped:
+            return None
+        if result is not None:
+            return result
+    return None
 
 
 def write_questions_txt(
