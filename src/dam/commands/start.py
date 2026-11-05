@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from ..config import Config
+from ..damrc import Config
 from ..detection.detector import Detection, detect
 from ..pdf import read_pdf
 from ..templates.code import infer_package, write_java_project, write_js, write_sql

@@ -75,8 +75,8 @@ ITEM_RE = re.compile(
 )
 # pies de página/folio que ensucian los enunciados (centros, webs, teléfonos)
 FOOTER_RE = re.compile(
-    r"(?m)^[^\n]*(?:\bwww\.\S+|\bTel\s*:|\bFax\s*:|@\S+)[^\n]*$"
-    r"|(?m)^[ \t]*(?:IES\b|Avda?\.[ \t]|[Cc/]\s*[Pp]\.?\s*\d{4,5}\b)[^\n]*$"
+    r"(?m)(?:^[^\n]*(?:\bwww\.\S+|\bTel\s*:|\bFax\s*:|@\S+)[^\n]*$"
+    r"|^[ \t]*(?:IES\b|Avda?\.[ \t]|[Cc/]\s*[Pp]\.?\s*\d{4,5}\b)[^\n]*$)"
 )
 # extensiones de fichero mencionadas en el texto
 EXT_RE = re.compile(r"\.([A-Za-z][A-Za-z0-9]{0,6})\b")

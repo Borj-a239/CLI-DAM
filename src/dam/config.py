@@ -1,86 +1,132 @@
-"""Lectura y escritura de la configuración en ~/.damrc (formato clave = valor)."""
+"""Carga y validación de acciones.json ANTES de tocar el disco.
+
+Esquema (v1): ver el README, sección «Esquema de acciones.json».
+"""
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass, field
+import json
+import re
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List
 
-from .util import expand_home, home_dir
+from .errores import AccionNoValida, ConfigError
 
-
-
-def config_path() -> Path:
-    """Resuelto en cada llamada: ~/.damrc (respeta el HOME del momento)."""
-    return home_dir() / ".damrc"
-
-
-
-DEFAULT_ROOTS = ["~/DAM"]
-
-
-@dataclass
-class Config:
-    roots: List[Path] = field(default_factory=list)
-    autor: str = ""
-    editor: str = ""
-
-    def roots_or(self, fallback: List[Path]) -> List[Path]:
-        return self.roots if self.roots else fallback
+TIPOS = {"mover", "copiar", "renombrar", "borrar", "revisar"}
+OBLIGATORIOS = ["nombre", "descripcion", "tipo"]
+POR_TIPO = {"mover": "destino", "copiar": "destino", "renombrar": "plantilla"}
+NOMBRE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+CAMPOS_FILTRO = {
+    "extensiones",
+    "patron",
+    "mas_antiguo_que_dias",
+    "mas_reciente_que_dias",
+    "mayor_que_mb",
+    "recursivo",
+}
 
 
-def _split_list(raw: str) -> List[str]:
-    return [part.strip() for part in raw.split(",") if part.strip()]
-
-
-def load_config(path: Optional[Path] = None) -> Config:
-    """Parseja ~/.damrc. Ignora silenciosament línies malformades."""
-    cfg_path = path or config_path()
-    raw_roots: List[str] = []
-    autor = ""
-    editor = ""
-    if cfg_path.exists():
+def _valida_filtro(acc: dict, nombre: str) -> None:
+    filtro = acc.get("filtro")
+    if filtro is None:
+        return
+    if not isinstance(filtro, dict):
+        raise AccionNoValida(nombre, "filtro", "debe ser un objeto")
+    desconocidos = set(filtro) - CAMPOS_FILTRO
+    if desconocidos:
+        raise AccionNoValida(
+            nombre,
+            "filtro",
+            f"campos desconocidos: {', '.join(sorted(desconocidos))}",
+        )
+    if "extensiones" in filtro:
+        exts = filtro["extensiones"]
+        if not isinstance(exts, list) or not all(
+            isinstance(e, str) and e.startswith(".") for e in exts
+        ):
+            raise AccionNoValida(
+                nombre, "filtro.extensiones", "debe ser lista de extensiones con punto"
+            )
+    patron = filtro.get("patron")
+    if patron is not None:
         try:
-            for line in cfg_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, _, value = line.partition("=")
-                key = key.strip().lower()
-                value = value.strip().strip("\"'")
-                if key == "roots":
-                    raw_roots.extend(_split_list(value))
-                elif key == "autor":
-                    autor = value
-                elif key == "editor":
-                    editor = value
-        except OSError:
-            pass
-
-    roots: List[Path] = []
-    for item in raw_roots:
-        expanded = expand_home(item)
-        if expanded.is_dir():
-            roots.append(expanded.resolve())
-    return Config(roots=roots, autor=autor, editor=editor or "xdg-open")
+            re.compile(patron)
+        except re.error as e:
+            raise AccionNoValida(
+                nombre, "filtro.patron", f"expresión regular rota: {e}"
+            )
+    for campo in ("mas_antiguo_que_dias", "mas_reciente_que_dias", "mayor_que_mb"):
+        if campo in filtro and (
+            not isinstance(filtro[campo], (int, float)) or isinstance(filtro[campo], bool)
+            or filtro[campo] <= 0
+        ):
+            raise AccionNoValida(nombre, f"filtro.{campo}", "debe ser un número > 0")
+    if "recursivo" in filtro and not isinstance(filtro["recursivo"], bool):
+        raise AccionNoValida(nombre, "filtro.recursivo", "debe ser true/false")
 
 
-def ensure_config() -> Path:
-    """Crea ~/.damrc con valores por defecto si no existe. Devuelve la ruta."""
-    target = config_path()
-    if target.exists():
-        return target
-    example_roots = ", ".join(DEFAULT_ROOTS)
-    content = (
-        "# Configuración de dam (formato: clave = valor)\n"
-        f"# roots: lista de carpetas donde buscar, separadas por comas (sin límite)\n"
-        f"roots = {example_roots}\n"
-        "autor = Tu Nombre\n"
-        "editor = code\n"
-    )
+def _valida_accion(a: Any, vistos: set) -> None:
+    if not isinstance(a, dict):
+        raise ConfigError("Cada acción debe ser un objeto JSON")
+    nombre = str(a.get("nombre") or f"nº {len(vistos) + 1}")
+    for campo in OBLIGATORIOS:
+        if not a.get(campo):
+            raise AccionNoValida(nombre, campo, "es obligatorio")
+    if not NOMBRE_RE.match(nombre):
+        raise AccionNoValida(
+            nombre, "nombre", "solo minúsculas, dígitos y guiones, sin espacios"
+        )
+    if nombre in vistos:
+        raise AccionNoValida(nombre, "nombre", "está repetido")
+    vistos.add(nombre)
+    tipo = a["tipo"]
+    if tipo not in TIPOS:
+        raise AccionNoValida(
+            nombre, "tipo", f"«{tipo}» no existe; usa uno de: {', '.join(sorted(TIPOS))}"
+        )
+    extra = POR_TIPO.get(tipo)
+    if extra and not a.get(extra):
+        raise AccionNoValida(
+            nombre, extra, f"es obligatorio en acciones de tipo {tipo}"
+        )
+    if tipo == "renombrar" and a.get("plantilla") is not None:
+        plantilla = str(a["plantilla"])
+        huecos = set(re.findall(r"\{(\w+)", plantilla))
+        if not huecos <= {"fecha", "n", "ext", "nombre"}:
+            raise AccionNoValida(
+                nombre,
+                "plantilla",
+                "huecos válidos: fecha, n, ext, nombre",
+            )
+    if tipo == "borrar" and a.get("confirmar") is not True:
+        raise AccionNoValida(
+            nombre, "confirmar", "las acciones que borran exigen confirmar: true"
+        )
+    _valida_filtro(a, nombre)
+
+
+def cargar(ruta: Path) -> List[dict]:
+    """Devuelve la lista de acciones validadas; si algo falla, ConfigError."""
+    ruta = ruta.expanduser()
+    if not ruta.is_file():
+        raise ConfigError(
+            f"No encuentro {ruta}. Crea acciones.json o usa --config RUTA"
+        )
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
-    except OSError:
-        pass
-    return target
+        datos = json.loads(ruta.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise ConfigError(
+            f"{ruta.name} no es JSON válido: línea {e.lineno}, columna {e.colno} ({e.msg})"
+        )
+    if not isinstance(datos, dict):
+        raise ConfigError("La raíz de acciones.json debe ser un objeto {...}")
+    if datos.get("version") != 1:
+        raise ConfigError(
+            f"Versión de esquema «{datos.get('version')}» no soportada; la actual es 1"
+        )
+    acciones = datos.get("acciones")
+    if not isinstance(acciones, list) or not acciones:
+        raise ConfigError("Falta la lista «acciones» o está vacía")
+    vistos: set = set()
+    for a in acciones:
+        _valida_accion(a, vistos)
+    return acciones

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from .. import state
-from ..config import Config, config_path, ensure_config, load_config
+from ..damrc import Config, config_path, ensure_config, load_config
 from ..index import Entry, index_root
 from ..search import rank
 from ..selector import select

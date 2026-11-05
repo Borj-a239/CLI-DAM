@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import List
 
-from ..config import Config
+from ..damrc import Config
 from ..util import err, expand_home
 
 BUILD_JUNK = {
