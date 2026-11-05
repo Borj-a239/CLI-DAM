@@ -1,5 +1,7 @@
 # dam
 
+[![pruebas](https://github.com/Borj-a239/CLI-DAM/actions/workflows/ci.yml/badge.svg)](https://github.com/Borj-a239/CLI-DAM/actions/workflows/ci.yml)
+
 CLI de terminal para estudiantes de 1º DAM: **navega** por tus carpetas de estudio,
 **monta la plantilla vacía** que toca a partir de un PDF de enunciado y **ejecuta
 acciones sobre tus ficheros** que defines tú en `acciones.json`, sin tocar código.

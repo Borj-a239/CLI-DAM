@@ -7,8 +7,8 @@
 # función envoltoria es la que hace el `cd` real en TU shell.
 #
 # Instalación:
-#   1) Instala el paquete (te crea el binario _dam):
-#        python3 -m pip install .
+#   1) Instala el paquete (te crea los binarios dam y _dam):
+#        uv tool install --editable .     # o: uv tool install git+https://...
 #   2) Pega (o sourcea) este fichero desde tu ~/.bashrc:
 #        source /ruta/al/repo/dam.bash        # o copia el contenido dentro
 #   3) Abre un terminal nuevo. Ya puedes usar `dam go ...` y `dam last`.
