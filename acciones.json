@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "acciones": [
+    {
+      "nombre": "copia-apuntes",
+      "descripcion": "Copia a ~/CopiaDAM los apuntes DAM modificados en los últimos 7 días",
+      "tipo": "copiar",
+      "origen": "~/DAM",
+      "filtro": {
+        "extensiones": [".pdf", ".docx", ".odt", ".md", ".txt", ".py", ".sql"],
+        "mas_reciente_que_dias": 7,
+        "recursivo": true
+      },
+      "destino": "~/CopiaDAM"
+    },
+    {
+      "nombre": "renombrar-fotos",
+      "descripcion": "Renombra las fotos del móvil (IMG_/PXL_) con su fecha: 2026-11-05_001.jpg",
+      "tipo": "renombrar",
+      "origen": "~/Baixades",
+      "filtro": {
+        "extensiones": [".jpg", ".jpeg", ".png"],
+        "patron": "^(IMG|PXL)_"
+      },
+      "plantilla": "{fecha:%Y-%m-%d}_{n:03}{ext}"
+    },
+    {
+      "nombre": "revisar-documentos",
+      "descripcion": "Analiza los documentos de Descargas y avisa de los que parecen inacabados o con errores",
+      "tipo": "revisar",
+      "origen": "~/Baixades",
+      "min_palabras": 150,
+      "filtro": {
+        "extensiones": [".pdf", ".docx", ".odt", ".txt", ".md"]
+      }
+    }
+  ]
+}

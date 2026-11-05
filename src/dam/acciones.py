@@ -152,5 +152,8 @@ class Revisar(Accion):
         if texto.strip() and texto.strip()[-1] not in ".:;!?…\"')»]":
             avisos.append("el texto no acaba en signo de puntuación")
         return Resultado(
-            fichero, None, "hecho", "; ".join(avisos) or "pinta completo"
+            fichero,
+            None,
+            "simulado" if simular else "hecho",
+            "; ".join(avisos) or "pinta completo",
         )
