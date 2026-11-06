@@ -71,7 +71,7 @@ class DamTestCase(unittest.TestCase):
     def test_go_busca_en_roots(self) -> None:
         code, out, _ = run_dam(["go", "herencia", "--print-fast"])
         self.assertEqual(code, 0)
-        self.assertEqual(out.strip(), str(self.root / "ASIX" / "UD03" / "herencia"))
+        self.assertEqual(out.strip(), str((self.root / "ASIX" / "UD03" / "herencia").resolve()))
 
     def test_go_sin_resultado_no_peta(self) -> None:
         code, out, err = run_dam(["go", "esto-no-existe-zzz", "--print-fast"])
@@ -85,7 +85,7 @@ class DamTestCase(unittest.TestCase):
             ["go", "herencia", str(self.extra), "--print-fast"]
         )
         self.assertEqual(code, 0)
-        self.assertTrue(out.strip().startswith(str(self.extra)))
+        self.assertTrue(out.strip().startswith(str(self.extra.resolve())))
 
     def test_go_punto_desde_cwd(self) -> None:
         old_cwd = os.getcwd()
@@ -100,16 +100,16 @@ class DamTestCase(unittest.TestCase):
     def test_go_tri_un_fitxer_torna_la_seva_carpete(self) -> None:
         code, out, _ = run_dam(["go", "Ejemplo.java", "--print-fast"])
         self.assertEqual(code, 0)
-        self.assertEqual(out.strip(), str(self.root / "ASIX" / "UD03" / "herencia"))
+        self.assertEqual(out.strip(), str((self.root / "ASIX" / "UD03" / "herencia").resolve()))
 
     def test_last_imprimeix_historial(self) -> None:
         run_dam(["go", "herencia", "--print-fast"])
         run_dam(["go", "apuntes", "--print-fast"])
         code, out, _ = run_dam(["last"])
         self.assertEqual(code, 0)
-        self.assertEqual(out.strip(), str(self.root / "ASIX" / "UD03" / "herencia"))
+        self.assertEqual(out.strip(), str((self.root / "ASIX" / "UD03" / "herencia").resolve()))
         code, out, _ = run_dam(["last", "0"])
-        self.assertEqual(out.strip(), str(self.root / "DM" / "apuntes"))
+        self.assertEqual(out.strip(), str((self.root / "DM" / "apuntes").resolve()))
 
     def test_last_buit_no_peta(self) -> None:
         code, out, err = run_dam(["last"])
