@@ -7,7 +7,15 @@
       "tipo": "copiar",
       "origen": "~/DAM",
       "filtro": {
-        "extensiones": [".pdf", ".docx", ".odt", ".md", ".txt", ".py", ".sql"],
+        "extensiones": [
+          ".pdf",
+          ".docx",
+          ".odt",
+          ".md",
+          ".txt",
+          ".py",
+          ".sql"
+        ],
         "mas_reciente_que_dias": 7,
         "recursivo": true
       },
@@ -19,7 +27,11 @@
       "tipo": "renombrar",
       "origen": "~/Baixades",
       "filtro": {
-        "extensiones": [".jpg", ".jpeg", ".png"],
+        "extensiones": [
+          ".jpg",
+          ".jpeg",
+          ".png"
+        ],
         "patron": "^(IMG|PXL)_"
       },
       "plantilla": "{fecha:%Y-%m-%d}_{n:03}{ext}"
@@ -31,8 +43,43 @@
       "origen": "~/Baixades",
       "min_palabras": 150,
       "filtro": {
-        "extensiones": [".pdf", ".docx", ".odt", ".txt", ".md"]
+        "extensiones": [
+          ".pdf",
+          ".docx",
+          ".odt",
+          ".txt",
+          ".md"
+        ]
       }
+    },
+    {
+      "nombre": "resumir-apuntes",
+      "descripcion": "Resume con la IA los PDF y textos de Baixades y guarda los resúmenes en ~/Resumenes",
+      "tipo": "resumir",
+      "origen": "~/Baixades",
+      "filtro": {
+        "extensiones": [
+          ".pdf",
+          ".txt",
+          ".md"
+        ]
+      },
+      "destino": "~/Resumenes",
+      "max_palabras": 200
+    },
+    {
+      "nombre": "renombrar-por-contenido",
+      "descripcion": "La IA lee el contenido de los documentos de Baixades y propone nombres; yo elijo cuál",
+      "tipo": "renombrar-ia",
+      "origen": "~/Baixades",
+      "filtro": {
+        "extensiones": [
+          ".pdf",
+          ".txt",
+          ".md"
+        ]
+      },
+      "opciones": 3
     }
   ]
 }
