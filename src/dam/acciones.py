@@ -125,14 +125,9 @@ class Revisar(Accion):
     tipo = "revisar"
 
     def _texto(self, fichero: Path) -> str:
-        sufijo = fichero.suffix.lower()
-        if sufijo in (".txt", ".md"):
-            return fichero.read_text(encoding="utf-8", errors="replace")
-        if sufijo == ".pdf":
-            from .pdf import read_pdf
+        from .ia import leer_documento
 
-            return read_pdf(fichero)
-        return ""
+        return leer_documento(fichero)
 
     def aplicar(self, fichero: Path, n: int, simular: bool) -> Resultado:
         avisos: List[str] = []
@@ -156,4 +151,37 @@ class Revisar(Accion):
             None,
             "simulado" if simular else "hecho",
             "; ".join(avisos) or "pinta completo",
+        )
+
+
+class Resumir(Accion):
+    """Resume el documento con la IA del centro (crea <nombre>-resumen.md)."""
+
+    tipo = "resumir"
+
+    def aplicar(self, fichero: Path, n: int, simular: bool) -> Resultado:
+        from .ia import resumir_fichero
+
+        dest = self.config.get("destino")
+        return resumir_fichero(
+            fichero,
+            Path(dest) if dest else None,
+            int(self.config.get("max_palabras", 200)),
+            simular,
+        )
+
+
+class RenombrarIA(Accion):
+    """Renombra según el contenido: la IA propone opciones y se eligen."""
+
+    tipo = "renombrar-ia"
+
+    def aplicar(self, fichero: Path, n: int, simular: bool) -> Resultado:
+        from .ia import renombrar_fichero
+
+        return renombrar_fichero(
+            fichero,
+            getattr(self, "elegir", None),
+            simular,
+            int(self.config.get("opciones", 3)),
         )

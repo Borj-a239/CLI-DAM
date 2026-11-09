@@ -11,7 +11,7 @@ from typing import Any, List
 
 from .errores import AccionNoValida, ConfigError
 
-TIPOS = {"mover", "copiar", "renombrar", "borrar", "revisar"}
+TIPOS = {"mover", "copiar", "renombrar", "renombrar-ia", "borrar", "revisar", "resumir"}
 OBLIGATORIOS = ["nombre", "descripcion", "tipo"]
 POR_TIPO = {"mover": "destino", "copiar": "destino", "renombrar": "plantilla"}
 NOMBRE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")

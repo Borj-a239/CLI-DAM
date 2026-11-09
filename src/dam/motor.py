@@ -59,9 +59,15 @@ class Motor:
         return accion
 
     def ejecutar(
-        self, nombre: str, carpeta: Optional[Path], simular: bool
+        self,
+        nombre: str,
+        carpeta: Optional[Path],
+        simular: bool,
+        elegir=None,
     ) -> List[Resultado]:
         accion = self.accion(nombre)
+        if elegir is not None:
+            accion.elegir = elegir  # type: ignore[attr-defined]
         destino_carpeta = (
             Path(carpeta) if carpeta else Path(accion.config.get("origen", "."))
         ).expanduser()
