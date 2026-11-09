@@ -315,7 +315,10 @@ def ejecutar(
 
 def _docs_completar(ctx, params, incomplete):
     """Tab: completa carpetas y documentos (.pdf .txt .md .docx .odt)."""
-    from click.shell_completion import CompletionItem
+    try:
+        from click.shell_completion import CompletionItem
+    except ModuleNotFoundError:  # Typer >= 0.27 vende Click
+        from typer._click.shell_completion import CompletionItem
 
     if not incomplete:
         carpeta, prefijo = Path("."), ""
