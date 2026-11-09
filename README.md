@@ -73,13 +73,31 @@ Desinstalar: `uv tool uninstall dam`.
 | `dam start PDF [--dest A/P] [--odt] [--force]` | plantilla vacía desde el enunciado |
 | `dam ver [-a] [--build] [--depth N]` | árbol de la carpeta actual |
 | `dam last [N]` · `dam edit [RUTA]` · `dam conf [-e]` | historial y editor |
+| `dam resumir ARCHIVO [--dest D] [--max-palabras N] [--simular]` | resumen IA |
+| `dam renombrar ARCHIVO [--opciones N] [--simular] [--si]` | renombra por contenido: la IA propone y tú eliges |
+
+**Tab**: tras `dam --install-completion bash` (o `zsh`), el Tab completa
+órdenes y **documentos** (`.pdf .txt .md .docx .odt`):
+`dam resumir Ej<Tab>` → `Ejercicio_CSS.pdf`.
 
 ```bash
 dam --config ~/mis-acciones.json acciones       # opción global: antes de la orden
 dam ejecutar copia-apuntes --simular            # enseña qué haría, sin tocar nada
 dam ejecutar renombrar-fotos ~/Descargas        # pregunta si es destructiva
 dam ejecutar revisar-documentos --si            # para scripts: sin preguntar
+dam resumir ~/Baixades/Ejercicio_CSS.pdf --simular
+dam renombrar ~/Baixades/Ejercicio_CSS.pdf      # 1) 2) 3) | n = a tu gusto | s = igual
 ```
+
+## IA (opcional, con el modelo del centro)
+
+Las acciones de IA (`resumir`, `renombrar-ia`) leen su configuración de
+variables de entorno o del fichero `.env` de la raíz del repo (**nunca** se
+sube a git; `.env.example` te dice el formato): `CENTRO_IA_URL`,
+`CENTRO_IA_KEY`, `CENTRO_IA_MODEL` y opcional `CENTRO_IA_CA` (certificado del
+centro). Sin clave o sin red, la orden de IA lo explica en una línea amable y
+**todo lo demás sigue funcionando** (modo sin red). Ninguna clave viaja al repo,
+al historial ni a la pantalla.
 
 ## Esquema de `acciones.json`
 
@@ -91,12 +109,14 @@ dam ejecutar revisar-documentos --si            # para scripts: sin preguntar
 |---|---|---|
 | `nombre` | sí | lo que tecleas en `dam ejecutar`; único, minúsculas y guiones |
 | `descripcion` | sí | la que enseña `dam acciones` |
-| `tipo` | sí | `mover` · `copiar` · `renombrar` · `borrar` · `revisar` |
+| `tipo` | sí | `mover` · `copiar` · `renombrar` · `renombrar-ia` · `borrar` · `revisar` · `resumir` |
 | `origen` | no | carpeta por defecto; admite `~` |
-| `destino` | mover/copiar | adónde van (se crea si no existe) |
+| `destino` | mover/copiar | adónde van (se crea si no existe; en `resumir`, opcional) |
 | `plantilla` | renombrar | huecos: `{fecha:%Y-%m-%d}`, `{n:03}`, `{ext}`, `{nombre}` |
 | `confirmar` | borrar: `true` | pregunta antes de borrar salvo `--si` |
 | `min_palabras` | revisar (def. 150) | por debajo de eso, avisa «posiblemente inacabado» |
+| `max_palabras` | resumir (def. 200) | longitud del resumen |
+| `opciones` | renombrar-ia (def. 3) | cuántos nombres propone la IA |
 
 `filtro` (objeto, opcional — los ficheros deben cumplir **todos** lo que pongas):
 

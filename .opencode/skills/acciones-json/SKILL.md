@@ -4,7 +4,7 @@ description: Reglas del fichero acciones.json de la CLI dam (campos, tipos, filt
 ---
 # Esquema de acciones.json
 - Raíz: {"version": 1, "acciones": [...]}. Cada acción: nombre (único, minúsculas-con-guiones), descripcion, tipo.
-- Tipos: mover y copiar (requieren destino), renombrar (requiere plantilla), borrar (exige confirmar: true y pregunta salvo --si) y revisar (analiza documentos, nunca modifica; campo propio min_palabras).
+- Tipos: mover y copiar (requieren destino), renombrar (requiere plantilla), borrar (exige confirmar: true y pregunta salvo --si), revisar (analiza documentos, nunca modifica; campo propio min_palabras) y los de IA: resumir (crea <nombre>-resumen.md; campos destino y max_palabras opcionales) y renombrar-ia (propuestas de nombre que elige el usuario; campo opciones).
 - filtro opcional: extensiones (lista, en minúsculas), patron (regex válida), mas_antiguo_que_dias, mas_reciente_que_dias, mayor_que_mb, recursivo (true incluye subcarpetas).
 - plantilla: huecos {fecha:%Y-%m-%d}, {n:03}, {ext}, {nombre}.
 
@@ -13,4 +13,5 @@ description: Reglas del fichero acciones.json de la CLI dam (campos, tipos, filt
 - pathlib y shutil; encoding="utf-8"; nunca shell=True; nunca sobrescribir (destino_libre con sufijo « (n)»).
 - Toda acción admite --simular y devuelve list[Resultado]; con simular=True no se toca NADA del disco (ni mkdir).
 - Accion.desde_config es una fábrica por registro: un tipo nuevo = subclase con atributo tipo, sin if/elif.
+- Las acciones de IA viven en dam/ia.py (único punto que habla la red): clave SOLO desde .env/entorno (CENTRO_IA_*), sin clave o sin red → IaError con mensaje humano y las demás acciones siguen; toda respuesta del modelo pasa por limpia_nombre antes de tocar ficheros.
 - Si añades un campo o un tipo nuevo, documéntalo en el README y en esta skill.
