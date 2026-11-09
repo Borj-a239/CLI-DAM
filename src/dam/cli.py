@@ -19,6 +19,7 @@ from .commands import start as cmd_start
 from .commands import ver as cmd_ver
 from .damrc import ensure_config, load_config
 from .errores import DamError
+from .ia import DOC_EXT, limpia_nombre, renombrar_fichero, resumir_fichero
 from .motor import Motor
 from .util import err
 
@@ -29,7 +30,6 @@ app = typer.Typer(
         "Solo navega, monta estructuras vacías y aplica tus acciones; "
         "nunca resuelve nada."
     ),
-    add_completion=False,
     no_args_is_help=True,
 )
 
@@ -277,7 +277,7 @@ def ejecutar(
         accion = motor.accion(nombre)
         if accion.destructiva and not simular and not si:
             typer.confirm(f"«{nombre}» borra ficheros. ¿Seguro?", abort=True)
-        resultados = motor.ejecutar(nombre, carpeta, simular)
+        resultados = motor.ejecutar(nombre, carpeta, simular, None if si else _preguntar)
     except DamError as e:
         _captura_dam(e)
     except KeyboardInterrupt:
@@ -311,6 +311,119 @@ def ejecutar(
     )
     if simular:
         consola.print("Para hacerlo de verdad, repite la orden sin --simular.")
+
+
+def _docs_completar(ctx, params, incomplete):
+    """Tab: completa carpetas y documentos (.pdf .txt .md .docx .odt)."""
+    from click.shell_completion import CompletionItem
+
+    if not incomplete:
+        carpeta, prefijo = Path("."), ""
+    elif incomplete.endswith(("/", "\\")):
+        carpeta, prefijo = Path(incomplete), ""
+    elif "/" in incomplete or "\\" in incomplete:
+        carpeta = Path(incomplete).parent
+        prefijo = Path(incomplete).name
+    else:
+        carpeta, prefijo = Path("."), incomplete
+    if not carpeta.is_dir():
+        return []
+    salida = []
+    for p in sorted(carpeta.iterdir()):
+        if prefijo and not p.name.lower().startswith(prefijo.lower()):
+            continue
+        if p.is_dir():
+            salida.append(CompletionItem(str(p) + "/", help="carpeta"))
+        elif p.suffix.lower() in DOC_EXT:
+            salida.append(CompletionItem(str(p), help=p.suffix.lower()))
+    return salida
+
+
+def _informe(r) -> None:
+    color = {"hecho": "green", "simulado": "yellow", "saltado": "cyan"}[r.estado]
+    flecha = f" → {markup.escape(str(r.destino))}" if r.destino else ""
+    consola.print(
+        f"[{color}]✘[/] {markup.escape(r.origen.name)}{flecha}  "
+        f"[bold]\\[{r.estado}][/] {markup.escape(r.mensaje)}"
+    )
+
+
+def _preguntar(propuestas, fichero):
+    """Selector interactivo para renombrar: opciones de la IA o nombre a gusto."""
+    import sys
+
+    consola.print(f"[bold]{markup.escape(fichero.name)}[/bold] — propuestas:")
+    for i, nombre in enumerate(propuestas, 1):
+        consola.print(f"  [cyan]{i})[/cyan] {markup.escape(nombre)}")
+    if not sys.stdin.isatty():
+        consola.print("[yellow]Sin terminal: uso la primera opción.[/yellow]")
+        return propuestas[0]
+    while True:
+        resp = typer.prompt(
+            f"¿Cuál? (1-{len(propuestas)} | n = a tu gusto | s = dejar igual)",
+            default="1",
+        ).strip().lower()
+        if resp == "s":
+            return None
+        if resp == "n":
+            limpio = limpia_nombre(
+                typer.prompt("Nombre (minúsculas y guiones)"),
+                fichero.suffix.lower(),
+            )
+            if limpio:
+                return limpio
+            consola.print("[red]Nombre no válido: solo minúsculas y guiones.[/red]")
+            continue
+        if resp.isdigit() and 1 <= int(resp) <= len(propuestas):
+            return propuestas[int(resp) - 1]
+        consola.print("[red]Opción no válida.[/red]")
+
+
+@app.command()
+def resumir(
+    fichero: Path = typer.Argument(
+        ..., help="PDF o texto a resumir (Tab para completar)",
+        shell_complete=_docs_completar,
+    ),
+    dest: Optional[Path] = typer.Option(
+        None, "--dest", help="carpeta del resumen (por defecto, junto al fichero)"
+    ),
+    max_palabras: int = typer.Option(200, "--max-palabras"),
+    simular: bool = typer.Option(
+        False, "--simular", help="enseña qué haría sin llamar al modelo"
+    ),
+) -> None:
+    """Resume un documento con la IA del centro: crea <nombre>-resumen.md."""
+    try:
+        r = resumir_fichero(fichero.expanduser(), dest, max_palabras, simular)
+    except DamError as e:
+        _captura_dam(e)
+    _informe(r)
+
+
+@app.command()
+def renombrar(
+    fichero: Path = typer.Argument(
+        ..., help="documento a renombrar según su contenido (Tab)",
+        shell_complete=_docs_completar,
+    ),
+    opciones: int = typer.Option(3, "--opciones", help="cuántos nombres propone"),
+    simular: bool = typer.Option(
+        False, "--simular", help="enseña las propuestas sin tocar nada"
+    ),
+    si: bool = typer.Option(False, "--si", help="sin preguntar: usa la primera"),
+) -> None:
+    """La IA lee el contenido y propone nombres; tú eliges (1/2/3/n/s)."""
+    try:
+        r = renombrar_fichero(
+            fichero.expanduser(),
+            None if (si or simular) else _preguntar,
+            simular,
+            opciones,
+        )
+    except DamError as e:
+        _captura_dam(e)
+    _informe(r)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
