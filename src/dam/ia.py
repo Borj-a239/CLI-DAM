@@ -139,14 +139,16 @@ def leer_documento(fichero: Path) -> str:
 
 def limpia_nombre(propuesta: str, ext: str) -> str:
     """Convierte la respuesta del modelo en un nombre de fichero seguro."""
-    texto = propuesta.strip().strip("`\"'*-—: 0123456789. ")
+    texto = propuesta.strip().strip("`\"'* ")
+    texto = re.sub(r"^(?:\d+[\).\-\s]|[-—•·])+", "", texto)
+    si_termina_en_ext = texto.lower().endswith(ext)
+    if si_termina_en_ext:
+        texto = texto[: -len(ext)]
     texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
     texto = re.sub(r"[^a-z0-9]+", "-", texto.lower()).strip("-")[:60]
     if not texto:
         return ""
-    if not texto.endswith(ext):
-        texto = texto.rstrip("-") + ext
-    return texto
+    return texto + ext
 
 
 def resumir_texto(texto: str, max_palabras: int) -> str:
