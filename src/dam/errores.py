@@ -21,3 +21,7 @@ class AccionNoValida(ConfigError):
         super().__init__(f"Acción «{accion}», campo «{campo}»: {motivo}")
         self.accion = accion
         self.campo = campo
+
+
+class IaError(DamError):
+    """La IA no está configurada o no hay conexión: mensaje humano, código 1."""
