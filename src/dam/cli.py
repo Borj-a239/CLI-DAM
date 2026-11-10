@@ -68,6 +68,13 @@ def _captura_dam(e: DamError) -> None:
     raise typer.Exit(e.codigo_salida)
 
 
+def _version_flag(valor: bool) -> bool:
+    if valor:
+        consola.print(f"dam {__version__}")
+        raise typer.Exit()
+    return valor
+
+
 @app.callback()
 def principal(
     ctx: typer.Context,
@@ -77,13 +84,15 @@ def principal(
         help="ruta del fichero de acciones (por defecto ./acciones.json)",
     ),
     version: bool = typer.Option(
-        False, "--version", help="muestra la versión y sale", is_eager=True
+        False,
+        "--version",
+        help="muestra la versión y sale",
+        is_eager=True,
+        callback=_version_flag,
+        expose_value=False,
     ),
 ) -> None:
     """dam: tus acciones se escriben en acciones.json, no en el código."""
-    if version:
-        consola.print(f"dam {__version__}")
-        raise typer.Exit()
     ensure_config()
     ctx.obj = config.expanduser()
 
