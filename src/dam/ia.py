@@ -62,6 +62,10 @@ class ProveedorIA:
         self.url = _env("CENTRO_IA_URL", env).rstrip("/")
         self.clave = _env("CENTRO_IA_KEY", env)
         self.modelo = _env("CENTRO_IA_MODEL", env) or "qwen3.8-flash-next"
+        try:
+            self.timeout = int(_env("CENTRO_IA_TIMEOUT", env) or 180)
+        except ValueError:
+            self.timeout = 180
         ca = _env("CENTRO_IA_CA", env)
         self.ca = Path(ca).expanduser() if ca else None
 
@@ -91,7 +95,9 @@ class ProveedorIA:
             ssl.create_default_context(cafile=str(self.ca)) if self.ca else None
         )
         try:
-            with urllib.request.urlopen(peticion, timeout=60, context=contexto) as r:
+            with urllib.request.urlopen(
+                peticion, timeout=self.timeout, context=contexto
+            ) as r:
                 datos = json.load(r)
             return datos["choices"][0]["message"]["content"].strip()
         except urllib.error.HTTPError as e:
@@ -99,8 +105,13 @@ class ProveedorIA:
                 f"El servidor del modelo ha contestido {e.code}. Revisa "
                 "CENTRO_IA_URL / CENTRO_IA_KEY."
             )
-        except (urllib.error.URLError, TimeoutError, OSError, KeyError,
-                IndexError, json.JSONDecodeError, ValueError):
+        except TimeoutError:
+            raise IaError(
+                f"El modelo del centro está tardando más de {self.timeout} s. "
+                "Insiste o prueba con un modelo más rápido (CENTRO_IA_MODEL)."
+            )
+        except (urllib.error.URLError, OSError, KeyError, IndexError,
+                json.JSONDecodeError, ValueError):
             raise IaError(
                 "No hay conexión con el modelo del centro. Sin IA puedes "
                 "seguir usando el resto de dam: validar, go, start, ver…"
