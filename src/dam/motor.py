@@ -17,6 +17,10 @@ class Motor:
         self.acciones: Dict[str, Accion] = {
             a["nombre"]: Accion.desde_config(a) for a in acciones
         }
+        # Invariante de desarrollo: config ya validó que ningún nombre se repita.
+        assert len(self.acciones) == len(acciones), (
+            "el diccionario de acciones perdió entradas (nombres repetidos)"
+        )
 
     @staticmethod
     def seleccionar(carpeta: Path, filtro: dict) -> List[Path]:
@@ -48,6 +52,8 @@ class Motor:
             if mb and st.st_size < mb * 1024 * 1024:
                 continue
             elegidos.append(f)
+        # Invariante de desarrollo: aquí solo llegan ficheros reales.
+        assert all(isinstance(f, Path) for f in elegidos), "seleccionar devolvió basura"
         return elegidos
 
     def accion(self, nombre: str) -> Accion:
@@ -66,6 +72,8 @@ class Motor:
         elegir=None,
     ) -> List[Resultado]:
         accion = self.accion(nombre)
+        assert accion is not None, "accion() debería haber lanzado DamError"
+        assert accion.nombre == nombre, "el motor devolvió otra acción"
         if elegir is not None:
             accion.elegir = elegir  # type: ignore[attr-defined]
         destino_carpeta = (

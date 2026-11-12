@@ -129,4 +129,6 @@ def cargar(ruta: Path) -> List[dict]:
     vistos: set = set()
     for a in acciones:
         _valida_accion(a, vistos)
+    # Invariante de desarrollo: si la validación no grita, todo tiene nombre.
+    assert all(a.get("nombre") for a in acciones), "acción sin nombre tras validar"
     return acciones

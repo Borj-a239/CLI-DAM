@@ -34,6 +34,8 @@ def destino_libre(destino: Path) -> Path:
     while libre.exists():
         libre = destino.with_name(f"{destino.stem} ({n}){destino.suffix}")
         n += 1
+    # Invariante de desarrollo: la función promete una ruta libre.
+    assert not libre.exists(), "destino_libre devolvió una ruta ya ocupada"
     return libre
 
 
@@ -60,10 +62,17 @@ class Accion(ABC):
             raise AccionNoValida(
                 config.get("nombre", "?"), "tipo", "no hay ninguna clase para ese tipo"
             )
+        # El registro no puede mentir: la clase encontrada es de ese tipo.
+        assert clase.tipo == config["tipo"], "registro de acciones corrupto"
         return clase(config)
 
     def ejecutar(self, ficheros: List[Path], simular: bool) -> List[Resultado]:
-        return [self.aplicar(f, n, simular) for n, f in enumerate(ficheros, start=1)]
+        resultados = [self.aplicar(f, n, simular) for n, f in enumerate(ficheros, start=1)]
+        # Invariante de desarrollo: ningún aplicar() debe inventar estados raros.
+        assert all(
+            r.estado in {"hecho", "simulado", "saltado"} for r in resultados
+        ), "una acción devolvió un estado desconocido"
+        return resultados
 
     @abstractmethod
     def aplicar(self, fichero: Path, n: int, simular: bool) -> Resultado: ...
