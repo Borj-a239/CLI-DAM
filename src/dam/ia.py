@@ -159,7 +159,11 @@ def limpia_nombre(propuesta: str, ext: str) -> str:
     texto = re.sub(r"[^a-z0-9]+", "-", texto.lower()).strip("-")[:60]
     if not texto:
         return ""
-    return texto + ext
+    nombre = texto + ext
+    # Invariante de desarrollo: nunca salen rutas ni separadores raros.
+    assert "/" not in nombre and "\\" not in nombre, "nombre de fichero con rutas"
+    assert nombre.endswith(ext), "el nombre ha perdido la extensión"
+    return nombre
 
 
 def resumir_texto(texto: str, max_palabras: int) -> str:
