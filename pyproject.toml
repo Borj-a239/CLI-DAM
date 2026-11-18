@@ -1,6 +1,6 @@
 [project]
 name = "dam"
-version = "1.0.0"
+version = "1.2.0"
 description = "Asistente de navegación, plantillas y acciones con ficheros para DAM"
 readme = "README.md"
 requires-python = ">=3.10"

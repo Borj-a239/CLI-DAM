@@ -3,9 +3,25 @@
 Formato inspirado en *Keep a Changelog*; los números siguen
 [SemVer](https://semver.org/lang/es/) (`mayor.menor.parche`).
 
-## [Unreleased]
+## [1.2.0] — 2026-11-13
 
-_Nada pendiente._
+### Añadido
+
+- **`dam comprobar-ia`**: dice de golpe si la IA del centro responde (servidor,
+  modelo y si la clave está definida, sin enseñarla). Sale con 4 si no.
+- **Caja de arena en las pruebas** (`tests/conftest.py`): la fixture `aislado`
+  (autouse) encierra cada prueba en una carpeta temporal sin red ni IA, y
+  `tests/test_cli.py` prueba la CLI desde fuera con `CliRunner` (un código de
+  salida por caso, sin trazas).
+- **`scripts/revisar.sh`**: el subagente revisor (`opencode run`) mira el
+  `git add` antes de commitear, sin abrir la interfaz.
+- **ADR-0002** sobre por qué la IA va detrás de una interfaz `ProveedorIA`.
+
+### Cambiado
+
+- Sin IA (falta de clave, sin red o servidor caído) ahora **sale con código 4**
+  (antes 1), para distinguirlo de un fallo normal; las acciones sin IA siguen
+  saliendo con 0.
 
 ## [1.1.0] — 2026-11-13
 
