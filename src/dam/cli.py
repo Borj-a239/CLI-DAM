@@ -438,6 +438,24 @@ def renombrar(
     _informe(r)
 
 
+@app.command()
+def comprobar_ia() -> None:
+    """Dice si la IA del centro está disponible (sale con 4 si no lo está)."""
+    from . import ia
+
+    prov = ia.proveedor()
+    consola.print(
+        f"servidor: {prov.url or '(sin definir)'} · modelo: {prov.modelo} · "
+        f"clave: {'definida' if prov.clave else 'NO definida'}"
+    )
+    try:
+        respuesta = prov.preguntar("Responde exactamente: OK", max_tokens=5)
+    except DamError as e:
+        consola_err.print(f"[yellow]✘ {e}[/yellow]")
+        raise typer.Exit(e.codigo_salida)
+    consola.print(f"[green]✔ la IA responde:[/green] {respuesta}")
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Modo programático (tests): SystemExit viaja al llamante, como antes."""
     app(args=argv, prog_name="dam", standalone_mode=True)

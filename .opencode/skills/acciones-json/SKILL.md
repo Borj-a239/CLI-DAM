@@ -13,5 +13,5 @@ description: Reglas del fichero acciones.json de la CLI dam (campos, tipos, filt
 - pathlib y shutil; encoding="utf-8"; nunca shell=True; nunca sobrescribir (destino_libre con sufijo « (n)»).
 - Toda acción admite --simular y devuelve list[Resultado]; con simular=True no se toca NADA del disco (ni mkdir).
 - Accion.desde_config es una fábrica por registro: un tipo nuevo = subclase con atributo tipo, sin if/elif.
-- Las acciones de IA viven en dam/ia.py (único punto que habla la red): clave SOLO desde .env/entorno (CENTRO_IA_*), sin clave o sin red → IaError con mensaje humano y las demás acciones siguen; toda respuesta del modelo pasa por limpia_nombre antes de tocar ficheros.
+- Las acciones de IA viven en dam/ia.py (único punto que habla la red): clave SOLO desde .env/entorno (CENTRO_IA_*), sin clave o sin red → IaError con mensaje humano y **código de salida 4** (las demás acciones siguen con 0); `dam comprobar-ia` dice si hay IA; toda respuesta del modelo pasa por limpia_nombre antes de tocar ficheros.
 - Si añades un campo o un tipo nuevo, documéntalo en el README y en esta skill.

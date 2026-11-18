@@ -21,6 +21,15 @@ El motor selecciona ficheros con `filtro` y aplica la acción; `config.py` valid
 todo el JSON **antes** de tocar el disco y sale con código 3 diciendo qué acción
 y qué campo fallan.
 
+## Alternativas
+
+- **Acciones en el código** (una función por tarea): la opción de partida, que
+  he descartado por cascar cada trimestre y no dejar al alumno dueño de su
+  herramienta.
+- **Otro formato de configuración** (TOML o YAML en vez de JSON): válido, pero
+  el JSON ya viene con Python (`json` del estándar), no añade dependencias y el
+  esquema se documenta igual.
+
 ## Consecuencias
 
 - Positivas: añadir o retocar una acción es cambiar una línea de JSON (con
