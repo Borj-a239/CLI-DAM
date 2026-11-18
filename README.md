@@ -23,7 +23,8 @@ Nunca resuelve nada: preguntas literales, firmas sin cuerpo, ficheros vacíos.
 7. **Plataformas:** Linux primero; también Windows y macOS (pathlib, utf-8, sin
    `os.system` ni `shell=True`).
 8. **Códigos de salida:** 0 bien · 1 fallo al ejecutar · 2 error de uso (Typer) ·
-   3 configuración inválida.
+   3 configuración inválida · 4 IA no disponible (añadido en 1.1.0; sin IA el
+   resto sigue con código 0).
 9. **Instalación:** `uv tool install git+https://github.com/Borj-a239/CLI-DAM`.
 10. **Simulación:** toda acción se prueba antes con `--simular`.
 
@@ -75,6 +76,7 @@ Desinstalar: `uv tool uninstall dam`.
 | `dam last [N]` · `dam edit [RUTA]` · `dam conf [-e]` | historial y editor |
 | `dam resumir ARCHIVO [--dest D] [--max-palabras N] [--simular]` | resumen IA |
 | `dam renombrar ARCHIVO [--opciones N] [--simular] [--si]` | renombra por contenido: la IA propone y tú eliges |
+| `dam comprobar-ia` | dice si la IA del centro está disponible (sale con 4 si no) |
 
 **Tab**: tras `dam --install-completion bash` (o `zsh`), el Tab completa
 órdenes y **documentos** (`.pdf .txt .md .docx .odt`):
@@ -87,6 +89,7 @@ dam ejecutar renombrar-fotos ~/Descargas        # pregunta si es destructiva
 dam ejecutar revisar-documentos --si            # para scripts: sin preguntar
 dam resumir ~/Baixades/Ejercicio_CSS.pdf --simular
 dam renombrar ~/Baixades/Ejercicio_CSS.pdf      # 1) 2) 3) | n = a tu gusto | s = igual
+dam comprobar-ia                                # ¿está el modelo del centro? (0 sí, 4 no)
 ```
 
 ## IA (opcional, con el modelo del centro)
@@ -95,7 +98,8 @@ Las acciones de IA (`resumir`, `renombrar-ia`) leen su configuración de
 variables de entorno o del fichero `.env` de la raíz del repo (**nunca** se
 sube a git; `.env.example` te dice el formato): `CENTRO_IA_URL`,
 `CENTRO_IA_KEY`, `CENTRO_IA_MODEL` y opcional `CENTRO_IA_CA` (certificado del
-centro). Sin clave o sin red, la orden de IA lo explica en una línea amable y
+centro). Comprueba de golpe si responde: `dam comprobar-ia`. Sin clave o sin
+red, la orden de IA lo explica en una línea amable y **sale con código 4**, y
 **todo lo demás sigue funcionando** (modo sin red). Ninguna clave viaja al repo,
 al historial ni a la pantalla.
 
@@ -141,10 +145,11 @@ en `src/dam/acciones.py`, ver `docs/adr/0001-configuracion-externa.md`).
 ```
 src/dam/
 ├─ cli.py          interfaz Typer (la única que habla contigo)
-├─ errores.py      DamError (1) · ConfigError (3) · AccionNoValida
+├─ errores.py      DamError (1) · ConfigError (3) · AccionNoValida · IaError (4)
 ├─ config.py       carga y valida acciones.json ANTES de tocar disco
 ├─ motor.py        Motor: filtro de ficheros + delegación
 ├─ acciones.py     clases Accion (fábrica por registro, sin ifs por tipo)
+├─ ia.py           ProveedorIA: único punto de red (modo sin red → código 4)
 ├─ damrc.py        lectura de ~/.damrc
 ├─ commands/       go/last/edit/conf · start · ver
 ├─ detection/      detector del PDF + keywords.py editable
@@ -157,7 +162,13 @@ src/dam/
 ```bash
 uv run pytest                      # pruebas completas, en carpetas temporales
 uv run python -m tests.test_dam    # suite histórica
+dam comprobar-ia                   # ¿hay IA del centro? (0 sí, 4 sin IA)
+scripts/revisar.sh                 # el subagente revisor mira tu git add (opencode run)
 ```
+
+`tests/conftest.py` aísla cada prueba en una carpeta temporal sin red ni IA
+(fixture `aislado`), y `tests/test_cli.py` prueba la CLI desde fuera con
+`CliRunner`: un código de salida por caso (0, 1, 2, 3 y 4) sin ningún traceback.
 
 Prueba **siempre** en una carpeta de pruebas (`~/pruebas-tareas`) y con
 `--simular` antes de dejar que una acción toque tus ficheros reales.

@@ -33,6 +33,35 @@ OpenCode; el detalle está en el historial de git).
    columna (3), tipo desconocido (3), nombre repetido (3), regex rota (3),
    `--config nada.json` (3), uso incorrecto (2). Ninguno en traceback.
 
+## Semana 3-4 · capa IA, pruebas y release
+
+9.  **Capa IA** (build): «Añade `resumir` y `renombrar-ia` hablando con la API
+    del centro (OpenAI-compatible). La red vive SOLO en `ia.py` detrás de
+    `ProveedorIA.preguntar()`; sin clave o sin red, `IaError` humano y código 4,
+    y el resto de dam sigue. Clave en `.env` (ignorado), nunca en pantalla.»
+10. **Modo sin red** (auditoría): «Sin `CENTRO_IA_KEY`, con URL falsa y con el
+    centro saturado → siempre un mensaje humano y `echo $?` = 4; con esa misma
+    config, las acciones sin IA siguen saliendo con 0.»
+11. **Pruebas** (plan → build): «pytest sin tocar mis carpetas ni el servidor:
+    fixture `aislado` (autouse) con `tmp_path`, HOME/USERPROFILE al temporal y
+    fuera las `CENTRO_IA_*`; un proveedor falso para `resumir`/`renombrar`; y
+    `test_cli.py` con `CliRunner`, un código por caso (0,1,2,3,4) sin traceback.
+    No cambies `src/`: si una prueba falla, dime por qué.»
+12. **Proceso de release**: «asserts de desarrollo como invariantes» (PR #1),
+    «CHANGELOG.md y versiones» (PR #2), ramas `feature/*` fusionadas por PR y
+    `v1.0.0`/`v1.1.0` etiquetadas con changelog.
+
+Lo que corregí de lo que hizo el agente (lo que contaré en la defensa):
+
+- **Nombre duplicado de la IA**: `limpia_nombre` dejaba `tema-css-md.md`; pedí
+  el caso feo «el modelo devuelve el nombre ya con extensión» y se arregló en
+  el código, no en la prueba.
+- **Sin red ≠ código 1**: el agente salía con 1; el guion pide 4 para que se
+  distinga «solo falta la IA» de un fallo normal. Añadí `IaError.codigo_salida=4`
+  y la prueba que lo exige.
+- **Caja de arena incompleta**: faltaba `conftest.py`; ahora `aislado` impide
+  leer hasta el `.env` real del repo (`_archivos_env` vacío en pruebas).
+
 ## Reglas que nunca se negocian
 
 - Pruebas siempre en carpetas temporales; `--simular` primero.
