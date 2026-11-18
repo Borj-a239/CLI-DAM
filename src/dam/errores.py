@@ -24,4 +24,10 @@ class AccionNoValida(ConfigError):
 
 
 class IaError(DamError):
-    """La IA no está configurada o no hay conexión: mensaje humano, código 1."""
+    """La IA no está configurada o no hay conexión: mensaje humano, código 4.
+
+    El 4 avisa de que SOLO falta la IA: las acciones sin IA siguen bien
+    (código 0) y el resto de dam funciona igual.
+    """
+
+    codigo_salida = 4
